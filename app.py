@@ -6,6 +6,10 @@ from imutils.video import VideoStream, WebcamVideoStream
 outputFrame = None
 app = Flask(__name__)
 
+vs_mob1 = cv2.VideoCapture('http://192.168.100.11:8080/video')
+vs_mob2 = cv2.VideoCapture('https://192.168.100.4:8080/video')
+vs_web = VideoStream(src=0).start()
+
 
 @app.route('/')
 def hello_world():
@@ -55,7 +59,7 @@ def cam1():
     # type (mime type)
     # vs = VideoStream(src=0)
     # vs.start()
-    return Response(stream_cam1(VideoStream(src=0).start()),
+    return Response(stream_cam1(vs_web),
                     mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
@@ -63,7 +67,7 @@ def cam1():
 def cam2():
     # return the response generated along with the specific media
     # type (mime type)
-    return Response(stream_cam1(cv2.VideoCapture('http://192.168.100.11:8080/video')),
+    return Response(stream_cam1(vs_mob1),
                     mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
@@ -71,7 +75,7 @@ def cam2():
 def cam3():
     # return the response generated along with the specific media
     # type (mime type)
-    return Response(stream_cam1(cv2.VideoCapture('https://192.168.100.4:8080/video')),
+    return Response(stream_cam1(vs_mob2),
                     mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
@@ -82,4 +86,4 @@ if __name__ == '__main__':
     # t.start()
     app.run()
 
-# vs.stop()
+vs_web.stop()
