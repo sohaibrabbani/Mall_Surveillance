@@ -1,5 +1,3 @@
-# Set resolution for the video capture
-# Function adapted from https://kirr.co/0l6qmh
 import os
 
 import cv2
@@ -20,6 +18,7 @@ STD_DIMENSIONS = {
 }
 
 
+# Returns the new dimensions and resize the input source
 def get_dims(cap, res='1080p'):
     width, height = STD_DIMENSIONS["480p"]
     if res in STD_DIMENSIONS:
@@ -28,12 +27,14 @@ def get_dims(cap, res='1080p'):
     return width, height
 
 
+# Video file format to codec mapping
 VIDEO_TYPE = {
     '.avi': cv2.VideoWriter_fourcc(*'XVID'),
     '.mp4': cv2.VideoWriter_fourcc(*'XVID'),
 }
 
 
+# Returns the codec for given video file format
 def get_video_type(filename):
     filename, ext = os.path.splitext(filename)
     if ext in VIDEO_TYPE:
