@@ -5,7 +5,8 @@ import cv2
 
 from yolo.yolo import YOLO
 
-cam = cv2.VideoCapture(0)
+# cam = cv2.VideoCapture(0)
+cam = cv2.VideoCapture('http://192.168.100.6:8080/video')
 
 fps = FPS().start()
 yolo = YOLO()
@@ -25,8 +26,8 @@ while True:
     current = datetime.now()
     frames.append(frame)
     fps.update()
-    # if (current - start).total_seconds() >= 10:
-    #     break
+    if (current - start).total_seconds() >= 10:
+        break
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
