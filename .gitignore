@@ -1,2 +1,9 @@
 /venv/
 .idea/
+/data/
+/opencv/
+/opencv_contrib/
+/yolo/darknet53.weights
+/yolo/mask-yolov3_20000.weights
+/yolo/yolov3.weights
+/__pycache__/
