@@ -1,0 +1,21 @@
+<html>
+  <head>
+    <title>Mall Video Surveillance</title>
+  </head>
+  <body>
+  <h1>Mall Video Surveillance</h1>
+    <div>
+        <br>
+        <form id="upload-file" method="post" enctype="multipart/form-data">
+            <label for="imageUpload" class="upload-label">
+                Select File:
+            </label>
+            <input type="file" name="file" id="imageUpload" accept=".mp4">
+            <input type=submit value=Upload>
+        </form>
+        {% if filename %}
+            <img src="{{ url_for('video', filename=filename) }}">
+        {% endif %}
+    </div>
+  </body>
+</html>
