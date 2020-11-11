@@ -21,13 +21,13 @@ while True:
 
     t1 = time.time()
     ret, frame = cam.read()
-    layerOutputs = yolo.predict(frame)
+    # layerOutputs = yolo.predict(frame)
 
     cv2.imshow('frame', frame)
     current = datetime.now()
     frames.append(frame)
     fps.update()
-    cv2.imwrite("data/frames/frame%d.jpg" % count, frame)
+    # cv2.imwrite("data/frames/frame%d.jpg" % count, frame)
     count += 1
     # if (current - start).total_seconds() >= 10:
     #     break

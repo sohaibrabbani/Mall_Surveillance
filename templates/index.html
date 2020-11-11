@@ -4,11 +4,8 @@
   </head>
   <body>
     <h1>Mall Video Surveillance</h1>
-    <p>Camera 1</p>
-    <img src="{{ url_for('cam1') }}">
-    <p>Camera 2</p>
-    <img src="{{ url_for('cam2') }}">
-    <p>Camera 3</p>
-    <img src="{{ url_for('cam3') }}">
+    <p>Do you want to start detection on live stream or wants on videos?</p>
+    <a class="button" href="{{ url_for('live') }}">Live Feed</a> ||
+    <a class="button" href="{{ url_for('offline') }}">Offline</a>
   </body>
 </html>
