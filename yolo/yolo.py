@@ -7,10 +7,13 @@ np.random.seed(42)
 class YOLO:
     ACCEPTED_CLASSES = ["person"]
 
-    def __init__(self, config_path='yolo/yolov3-big.cfg', weights_path='yolo/yolov3.weights'):
-        self.classes = open('yolo/obj.names').read().strip().split("\n")
+    def __init__(self, config_path='yolo/yolov3_big.cfg', weights_path='yolo/yolov3.weights', use_gpu=True):
+        self.classes = open('yolo/coco.names').read().strip().split("\n")
         self.COLORS = np.random.randint(0, 255, size=(len(self.classes), 3), dtype="uint8")
         self.net = cv2.dnn.readNetFromDarknet(config_path, weights_path)
+        if use_gpu:
+            self.net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
+            self.net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
         self.layer_names = self.net.getLayerNames()
         self.layer_names = [self.layer_names[i[0] - 1] for i in self.net.getUnconnectedOutLayers()]
 

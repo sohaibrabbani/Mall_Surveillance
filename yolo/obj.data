@@ -1,5 +1,5 @@
-classes = 2
+classes = 80
 train   = mask-train.txt
 valid   = mask-test.txt
-names   = obj.names
+names   = coco.names
 backup  = backup
