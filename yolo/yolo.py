@@ -5,9 +5,9 @@ np.random.seed(42)
 
 
 class YOLO:
-    ACCEPTED_CLASSES = ["mask", "nomask"]
+    ACCEPTED_CLASSES = ["person"]
 
-    def __init__(self, config_path='yolo/yolov3.cfg', weights_path='yolo/mask-yolov3_20000.weights'):
+    def __init__(self, config_path='yolo/yolov3-big.cfg', weights_path='yolo/yolov3.weights'):
         self.classes = open('yolo/obj.names').read().strip().split("\n")
         self.COLORS = np.random.randint(0, 255, size=(len(self.classes), 3), dtype="uint8")
         self.net = cv2.dnn.readNetFromDarknet(config_path, weights_path)
@@ -29,22 +29,10 @@ class YOLO:
                 confidence = scores[class_id]
 
                 if confidence > thresh and self.classes[class_id] in self.ACCEPTED_CLASSES:
-
                     box = detection[0:4] * np.array([W, H, W, H])
                     (centerX, centerY, width, height) = box.astype("int")
-
-                    # use the center (x, y)-coordinates to derive the top
-                    # and and left corner of the bounding box
                     x = int(centerX - (width / 2))
                     y = int(centerY - (height / 2))
-                    # if y >= (height / 2):  # Add: For detection of a boundary in the frame
-                        # if not video_started:
-                        #     frame_start = frame_number
-                        #     frame_end = frame_number + 80
-                        #     video_started = True
-                        # # update our list of bounding box coordinates,
-                        # # confidences, and class IDs
-                        # # video_started = frame_end != frame_number
                     boxes.append([x, y, int(width), int(height)])
                     confidences.append(float(confidence))
                     class_ids.append(class_id)
@@ -64,16 +52,5 @@ class YOLO:
                 cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
                 text = "{}: {:.4f}".format(self.classes[class_ids[i]], confidences[i])
                 cv2.putText(frame, text, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-
-                # if frame_skip > 2:
-                #     crop_img = frame[y:y + h, x:x + w]
-                #     imageCounter += 1
-                #     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                #     image_name = "object-detection-%d.jpg" % imageCounter
-                #     cv2.imwrite(image_name, crop_img)
-                #     data.append([current_time, video_path + image_name, video_path + video_name + video_ext])
-                #     frame_skip = 0
-                # else:
-                #     frame_skip += 1
 
         return frame

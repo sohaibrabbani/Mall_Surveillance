@@ -3,41 +3,31 @@ from datetime import datetime
 from imutils.video import FPS
 import cv2
 
+from utils import STD_DIMENSIONS
+
+
 from yolo.yolo import YOLO
 
 # cam = cv2.VideoCapture(0)
-cam = cv2.VideoCapture(0)
+cam = cv2.VideoCapture('data/raw_vids/inside.mp4')
 
-fps = FPS().start()
 yolo = YOLO()
 
 
-start = datetime.now()
+if __name__ == '__main__':
 
+    count = 0
+    while True:
 
-frames = []
-count = 0
-while True:
+        ret, frame = cam.read()
+        # layerOutputs = yolo.predict(frame)
 
-    t1 = time.time()
-    ret, frame = cam.read()
-    # layerOutputs = yolo.predict(frame)
+        cv2.imshow('frame', frame)
+        cv2.imwrite("data/frames/frame%d.jpg" % count, frame)
+        count += 1
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
 
-    cv2.imshow('frame', frame)
-    current = datetime.now()
-    frames.append(frame)
-    fps.update()
-    # cv2.imwrite("data/frames/frame%d.jpg" % count, frame)
-    count += 1
-    # if (current - start).total_seconds() >= 10:
-    #     break
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-fps.stop()
-print(len(frames))
-print(fps.fps(), fps.elapsed())
-
-cam.release()
-cv2.destroyAllWindows()
+    cam.release()
+    cv2.destroyAllWindows()
 
