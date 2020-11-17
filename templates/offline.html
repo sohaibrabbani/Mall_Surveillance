@@ -13,8 +13,8 @@
             <input type="file" name="file" id="imageUpload" accept=".mp4">
             <input type=submit value=Upload>
         </form>
-        {% if filename %}
-            <img src="{{ url_for('video', filename=filename) }}">
+        {% if filename1 and filename2 %}
+            <img src="{{ url_for('video', filename1=filename1, filename2=filename2, filename3=filename3) }}">
         {% endif %}
     </div>
   </body>
