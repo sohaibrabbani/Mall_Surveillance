@@ -1,37 +1,36 @@
 import os
 import threading
+from datetime import datetime
 
 import cv2
 import numpy as np
-from flask import Flask, Response, render_template, request, redirect, flash, url_for
+from flask import Flask
+from flask import Response, render_template, request, redirect, flash, url_for
+from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 
 from utils import get_video_type, get_dims, STD_DIMENSIONS
 from yolo.yolo import YOLO
 
-
-H1 = np.array([
-    [-4.27399796e-01, 1.40282390e-01, 6.87836375e+02],
-    [7.21461165e-02, 6.25402709e-01, 1.58922825e+02],
-    [-7.49957146e-04, 2.30730214e-03, 1.00000000e+00]
-])
-
-H2 = np.array([
-    [2.96918550e-01, 1.69874720e+00, -1.41966972e+02],
-    [-3.71748569e-01,  8.56329387e-01, 3.30452853e+02],
-    [-1.92530358e-04, 2.88393061e-03, 1.00000000e+00]
-])
-
-# H3 = np.array([
-#     [2.05922076e+00, 1.30011514e+01, -2.81893694e+03],
-#     [-1.89580564e+00, 7.09821542e+00, 1.29444617e+03],
-#     [1.26423954e-03, 2.04093995e-02, 1.00000000e+00]
-# ])
-H3 = np.array([[ 8.87417770e-01,6.78122356e+00, -1.33642387e+03],
- [-1.10018243e+00,3.66039041e+00,7.94978181e+02],
- [ 3.13098076e-04,1.01824975e-02,1.00000000e+00]])
-
 app = Flask(__name__)
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/survillance.db'
+db = SQLAlchemy(app)
+
+
+class Object(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    x = db.Column(db.Integer)
+    y = db.Column(db.Integer)
+    w = db.Column(db.Integer)
+    h = db.Column(db.Integer)
+    name = db.Column(db.String(80))
+    source = db.Column(db.String(200))
+    frame_no = db.Column(db.Integer)
+
+    def __repr__(self):
+        return f'<Object x: {self.x}, y: {self.y}, w:{self.w}, h:{self.h}, class: {self.name}>'
+
 
 lock1 = threading.Lock()
 stream_output1 = [np.zeros((100, 100)), ]
@@ -46,6 +45,28 @@ stream_output3 = [np.zeros((100, 100)), ]
 web_cam1 = cv2.VideoCapture()  # web-cam feed
 mob_cam2 = cv2.VideoCapture()  # mobile cam 1
 mob_cam3 = cv2.VideoCapture()  # mobile cam 2
+
+
+FPS = 2
+
+
+H1 = np.array([
+    [-4.27399796e-01, 1.40282390e-01, 6.87836375e+02],
+    [7.21461165e-02, 6.25402709e-01, 1.58922825e+02],
+    [-7.49957146e-04, 2.30730214e-03, 1.00000000e+00]
+])
+
+H2 = np.array([
+    [2.96918550e-01, 1.69874720e+00, -1.41966972e+02],
+    [-3.71748569e-01,  8.56329387e-01, 3.30452853e+02],
+    [-1.92530358e-04, 2.88393061e-03, 1.00000000e+00]
+])
+
+H3 = np.array([
+    [8.87417770e-01, 6.78122356e+00, -1.33642387e+03],
+    [-1.10018243e+00, 3.66039041e+00, 7.94978181e+02],
+    [3.13098076e-04, 1.01824975e-02, 1.00000000e+00]
+])
 
 
 # Home page for displaying the camera feeds
@@ -74,7 +95,7 @@ def stream_video(file_path1, file_path2, file_path3, res):
             if grabbed1:
                 frame1 = cv2.resize(frame1, dimensions)
                 frame1_pred = yolo.predict(frame1.copy())
-                frame1_warp = cv2.warpPerspective(frame1_pred, H1, STD_DIMENSIONS["720p"])
+                frame1_warp = cv2.warpPerspective(frame1, H1, STD_DIMENSIONS["720p"])
 
             frame2 = np.zeros(dimensions)
             grabbed2, frame2 = vid2.read()
@@ -82,18 +103,19 @@ def stream_video(file_path1, file_path2, file_path3, res):
                 frame2 = np.rot90(frame2, 2)
                 frame2 = cv2.resize(frame2, dimensions)
                 frame2_pred = yolo.predict(frame2.copy())
-                frame2_warp = cv2.warpPerspective(frame2_pred, H2, STD_DIMENSIONS["720p"])
+                frame2_warp = cv2.warpPerspective(frame2, H2, STD_DIMENSIONS["720p"])
 
             frame3 = np.zeros(dimensions)
             grabbed3, frame3 = vid3.read()
             if grabbed3:
                 frame3 = cv2.resize(frame3, dimensions)
                 frame3_pred = yolo.predict(frame3.copy())
-                frame3_warp = cv2.warpPerspective(frame3_pred, H3, STD_DIMENSIONS["720p"])
+                frame3_warp = cv2.warpPerspective(frame3, H3, STD_DIMENSIONS["720p"])
 
 
             final = np.where(np.logical_or(np.equal(frame1_warp, 0), np.equal(frame2_warp, 0)), frame1_warp + frame2_warp, (frame1_warp + frame2_warp)/2)
             final = np.where(np.logical_or(np.equal(final, 0), np.equal(frame3_warp, 0)), final + frame3_warp, (final + frame3_warp)/2)
+
         except:
             pass
 
@@ -147,18 +169,28 @@ def offline():
 def detect_objects(source, address, filename, res, yolo, stream_output, lock):
     dimensions = get_dims(source, res)
     if filename:
-        out = cv2.VideoWriter('data/'+filename, get_video_type(filename), 12, dimensions)
-
+        out = cv2.VideoWriter('data/'+filename, get_video_type(filename), FPS, dimensions)
+    frame_no = 0
     while True:
         while not source.isOpened():
             source.open(address)
 
         try:
+            frame_no += 1
             grabbed, frame = source.read()
             frame = cv2.resize(frame, dimensions)
-            frame = yolo.predict(frame)
+
             if filename:
                 out.write(frame)
+
+            for detection in yolo.predict(frame):
+                detection['frame_no'] = frame_no
+                detection['source'] = filename
+                object = Object(**detection)
+                db.session.add(object)
+
+            db.session.commit()
+
         except:
             frame = None
 
@@ -202,22 +234,30 @@ def cam3():
                     mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
-# cam1_t = threading.Thread(target=detect_objects, args=(web_cam1, 0, 'web_cam1.avi', 'custom',
-#                                                        YOLO(), stream_output1, lock1))  # Thread for camera 2
-# cam1_t.daemon = True
-# cam1_t.start()
-#
-#
-# cam2_t = threading.Thread(target=detect_objects, args=(mob_cam2, 'http://10.47.27.57:8080/video', 'mob_vid2.avi', 'custom',
-#                                                        YOLO(), stream_output2, lock2))  # Thread for camera 3
-# cam2_t.daemon = True
-# cam2_t.start()
-#
-#
-# cam3_t = threading.Thread(target=detect_objects, args=(mob_cam3, 'http://192.168.100.7:8080/video', 'mob_vid3.avi', 'custom',
-#                                                        YOLO(), stream_output3, lock3))  # Thread for camera 2
-# cam3_t.daemon = True
-# cam3_t.start()
+today = datetime.now()
+suffix = today.strftime('%m_%d_%Y_%H')
+
+
+cam1_t = threading.Thread(target=detect_objects, args=(web_cam1, 0, f'cam1_{suffix}.avi', 'custom',
+                                                       YOLO(), stream_output1, lock1))  # Thread for camera 2
+cam1_t.daemon = True
+cam1_t.start()
+
+
+cam2_t = threading.Thread(target=detect_objects, args=(mob_cam2,
+                                                       0,  # 'http://10.47.27.57:8080/video',
+                                                       f'cam2_{suffix}.avi', 'custom',
+                                                       YOLO(), stream_output2, lock2))  # Thread for camera 3
+cam2_t.daemon = True
+cam2_t.start()
+
+
+cam3_t = threading.Thread(target=detect_objects, args=(mob_cam3,
+                                                       0,  # 'http://192.168.100.7:8080/video',
+                                                       f'cam3_{suffix}.avi', 'custom',
+                                                       YOLO(), stream_output3, lock3))  # Thread for camera 2
+cam3_t.daemon = True
+cam3_t.start()
 
 
 if __name__ == '__main__':

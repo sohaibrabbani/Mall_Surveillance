@@ -17,7 +17,7 @@ class YOLO:
         self.layer_names = self.net.getLayerNames()
         self.layer_names = [self.layer_names[i[0] - 1] for i in self.net.getUnconnectedOutLayers()]
 
-    def predict(self, frame, thresh=0.1):
+    def predict(self, frame, thresh=0.1, draw=True):
         H, W = frame.shape[:2]
         blob = cv2.dnn.blobFromImage(frame, 1 / 255.0, (416, 416), swapRB=True, crop=False)
         self.net.setInput(blob)
@@ -42,6 +42,7 @@ class YOLO:
 
         idxs = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.3)
 
+        detections = []
         # ensure at least one detection exists
         if len(idxs) > 0:
             # loop over the indexes we are keeping
@@ -49,11 +50,16 @@ class YOLO:
                 # extract the bounding box coordinates
                 (x, y) = (boxes[i][0], boxes[i][1])
                 (w, h) = (boxes[i][2], boxes[i][3])
-
+                detections.append({
+                    'x': x, 'y': y,
+                    'w': w, 'h': h,
+                    'name': self.classes[class_ids[i]]
+                })
                 # draw a bounding box rectangle and label on the frame
-                color = [int(c) for c in self.COLORS[class_ids[i]]]
-                cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
-                text = "{}: {:.4f}".format(self.classes[class_ids[i]], confidences[i])
-                cv2.putText(frame, text, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                if draw:
+                    color = [int(c) for c in self.COLORS[class_ids[i]]]
+                    cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
+                    text = "{}: {:.4f}".format(self.classes[class_ids[i]], confidences[i])
+                    cv2.putText(frame, text, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-        return frame
+        return detections
