@@ -18,20 +18,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/survillance.db'
 db = SQLAlchemy(app)
 
 
-class Object(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    x = db.Column(db.Integer)
-    y = db.Column(db.Integer)
-    w = db.Column(db.Integer)
-    h = db.Column(db.Integer)
-    name = db.Column(db.String(80))
-    source = db.Column(db.String(200))
-    frame_no = db.Column(db.Integer)
-
-    def __repr__(self):
-        return f'<Object x: {self.x}, y: {self.y}, w:{self.w}, h:{self.h}, class: {self.name}>'
-
-
 lock1 = threading.Lock()
 stream_output1 = [np.zeros((100, 100)), ]
 
@@ -51,9 +37,9 @@ FPS = 2
 
 
 H1 = np.array([
-    [-4.27399796e-01, 1.40282390e-01, 6.87836375e+02],
-    [7.21461165e-02, 6.25402709e-01, 1.58922825e+02],
-    [-7.49957146e-04, 2.30730214e-03, 1.00000000e+00]
+    [-0.4267572874811169, 0.12202433258793428, 679.1648279868555],
+    [0.07855525944118393, 0.5634066050345926, 156.2850020670053],
+    [-0.0007529157598914953, 0.002160243169386294, 1.0]
 ])
 
 H2 = np.array([
@@ -67,6 +53,29 @@ H3 = np.array([
     [-1.10018243e+00, 3.66039041e+00, 7.94978181e+02],
     [3.13098076e-04, 1.01824975e-02, 1.00000000e+00]
 ])
+
+
+class Object(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    x = db.Column(db.Integer)
+    y = db.Column(db.Integer)
+    w = db.Column(db.Integer)
+    h = db.Column(db.Integer)
+    name = db.Column(db.String(80))
+    source = db.Column(db.String(200))
+    frame_no = db.Column(db.Integer)
+
+    def __repr__(self):
+        return f'<Object x: {self.x}, y: {self.y}, w:{self.w}, h:{self.h}, class: {self.name}>'
+
+
+def write_to_db(detections, filename, frame_no):
+    for detection in detections:
+        detection['frame_no'] = frame_no
+        detection['source'] = filename
+        object = Object(**detection)
+        db.session.add(object)
+    db.session.commit()
 
 
 # Home page for displaying the camera feeds
@@ -88,38 +97,53 @@ def stream_video(file_path1, file_path2, file_path3, res):
     vid3 = cv2.VideoCapture(file_path3)
     yolo = YOLO()
     dimensions = get_dims(vid, res)
-    empty = np.zeros(dimensions)
+    empty = np.zeros(tuple(reversed(STD_DIMENSIONS["720p"])))
+
+    frame_no = 0
     while vid.isOpened() or vid2.isOpened() or vid3.isOpened():
         try:
+            frame_no += 1
             grabbed1, frame1 = vid.read()
             if grabbed1:
                 frame1 = cv2.resize(frame1, dimensions)
-                frame1_pred = yolo.predict(frame1.copy())
+                write_to_db(yolo.predict(frame1), os.path.basename(file_path1), frame_no)
                 frame1_warp = cv2.warpPerspective(frame1, H1, STD_DIMENSIONS["720p"])
 
-            frame2 = np.zeros(dimensions)
+            # else:
+                # frame1_warp = empty.copy()
+
             grabbed2, frame2 = vid2.read()
             if grabbed2:
                 frame2 = np.rot90(frame2, 2)
                 frame2 = cv2.resize(frame2, dimensions)
-                frame2_pred = yolo.predict(frame2.copy())
+                write_to_db(yolo.predict(frame2), os.path.basename(file_path2), frame_no)
                 frame2_warp = cv2.warpPerspective(frame2, H2, STD_DIMENSIONS["720p"])
+            # else:
+            #     frame2_warp = empty.copy()
 
-            frame3 = np.zeros(dimensions)
             grabbed3, frame3 = vid3.read()
             if grabbed3:
                 frame3 = cv2.resize(frame3, dimensions)
-                frame3_pred = yolo.predict(frame3.copy())
+                write_to_db(yolo.predict(frame3), os.path.basename(file_path3), frame_no)
                 frame3_warp = cv2.warpPerspective(frame3, H3, STD_DIMENSIONS["720p"])
+            # else:
+            #     frame3_warp = empty.copy()
 
-
-            final = np.where(np.logical_or(np.equal(frame1_warp, 0), np.equal(frame2_warp, 0)), frame1_warp + frame2_warp, (frame1_warp + frame2_warp)/2)
-            final = np.where(np.logical_or(np.equal(final, 0), np.equal(frame3_warp, 0)), final + frame3_warp, (final + frame3_warp)/2)
-
+            a = frame1_warp / 255
+            b = frame2_warp / 255
+            c = frame3_warp / 255
+            final = np.zeros((a.shape))
+            final = np.where(np.logical_and(a != 0, b != 0, c != 0), (a + b + c) / 3, final)
+            final = np.where(np.logical_or(np.logical_and(a == 0, np.logical_xor(b == 0, c == 0)),
+                                       np.logical_and(c == 0, np.logical_xor(a == 0, b == 0)),
+                                       np.logical_and(b == 0, np.logical_xor(a == 0, c == 0))), a + b + c, final)
+            final = np.where(np.logical_or(np.logical_and(a != 0, np.logical_xor(b == 0, c == 0)),
+                                       np.logical_and(c != 0, np.logical_xor(a == 0, b == 0)),
+                                       np.logical_and(b != 0, np.logical_xor(a == 0, c == 0))), (a + b + c) / 2, final)
         except:
             pass
 
-        flag, encoded_image = cv2.imencode(".jpg", final)
+        flag, encoded_image = cv2.imencode(".jpg", final * 255)
 
         if not flag:
             continue
@@ -129,9 +153,9 @@ def stream_video(file_path1, file_path2, file_path3, res):
 
 @app.route('/video')
 def video():
-    filename1 = request.args.get('filename1')
-    filename2 = request.args.get('filename2')
-    filename3 = request.args.get('filename3')
+    filename1 = request.args.get('filename1', '')
+    filename2 = request.args.get('filename2', '')
+    filename3 = request.args.get('filename3', '')
     basepath = os.path.dirname(__file__)
     file_path1 = os.path.join(basepath, 'static', secure_filename(filename1))
     file_path2 = os.path.join(basepath, 'static', secure_filename(filename2))
@@ -183,13 +207,7 @@ def detect_objects(source, address, filename, res, yolo, stream_output, lock):
             if filename:
                 out.write(frame)
 
-            for detection in yolo.predict(frame):
-                detection['frame_no'] = frame_no
-                detection['source'] = filename
-                object = Object(**detection)
-                db.session.add(object)
-
-            db.session.commit()
+            write_to_db(yolo.predict(frame), filename, frame_no)
 
         except:
             frame = None

@@ -5,15 +5,15 @@
   <body>
   <h1>Mall Video Surveillance</h1>
     <div>
+        <h2>Offline Mode</h2>
         <br>
-        <h1>Live Feed</h1>
-{#        <form id="upload-file" method="post" enctype="multipart/form-data">#}
-{#            <label for="imageUpload" class="upload-label">#}
-{#                Select File:#}
-{#            </label>#}
-{#            <input type="file" name="file" id="imageUpload" accept=".mp4">#}
-{#            <input type=submit value=Upload>#}
-{#        </form>#}
+        <form id="upload-file" method="post" enctype="multipart/form-data">
+            <label for="imageUpload" class="upload-label">
+                Select File:
+            </label>
+            <input type="file" name="file" id="imageUpload" accept=".mp4">
+            <input type=submit value=Upload>
+        </form>
         {% if filename1 and filename2 %}
             <img src="{{ url_for('video', filename1=filename1, filename2=filename2, filename3=filename3) }}">
         {% endif %}
