@@ -9,6 +9,7 @@ from flask import Response, render_template, request, redirect, flash, url_for
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 
+from heatmap import heatmap
 from utils import get_video_type, get_dims, STD_DIMENSIONS
 from yolo.yolo import YOLO
 
@@ -91,22 +92,33 @@ def live():
 
 
 # file_path3,
+def plot_object(h_phary, detections, frame1):
+    points = []
+    for d in detections:
+        point = np.array([d['x'], d['y'], 1])
+        points.append(h_phary.dot(point).astype(int))
+    return points
+
+
 def stream_video(file_path1, file_path2, file_path3, res):
     vid = cv2.VideoCapture(file_path1)
     vid2 = cv2.VideoCapture(file_path2)
     vid3 = cv2.VideoCapture(file_path3)
     yolo = YOLO()
     dimensions = get_dims(vid, res)
-    empty = np.zeros(tuple(reversed(STD_DIMENSIONS["720p"])))
-
+    top_view = cv2.cvtColor(cv2.imread('data/top_view_720p.jpg'), cv2.COLOR_BGR2RGB) / 255
     frame_no = 0
+    frame_points = []
     while vid.isOpened() or vid2.isOpened() or vid3.isOpened():
+        points = []
         try:
             frame_no += 1
             grabbed1, frame1 = vid.read()
             if grabbed1:
                 frame1 = cv2.resize(frame1, dimensions)
-                write_to_db(yolo.predict(frame1), os.path.basename(file_path1), frame_no)
+                detections = yolo.predict(frame1)
+                points = plot_object(H1, detections, frame1)
+                write_to_db(detections, os.path.basename(file_path1), frame_no)
                 frame1_warp = cv2.warpPerspective(frame1, H1, STD_DIMENSIONS["720p"])
 
             # else:
@@ -116,7 +128,9 @@ def stream_video(file_path1, file_path2, file_path3, res):
             if grabbed2:
                 frame2 = np.rot90(frame2, 2)
                 frame2 = cv2.resize(frame2, dimensions)
-                write_to_db(yolo.predict(frame2), os.path.basename(file_path2), frame_no)
+                detections = yolo.predict(frame2)
+                points += plot_object(H2, detections, frame2)
+                write_to_db(detections, os.path.basename(file_path2), frame_no)
                 frame2_warp = cv2.warpPerspective(frame2, H2, STD_DIMENSIONS["720p"])
             # else:
             #     frame2_warp = empty.copy()
@@ -124,7 +138,9 @@ def stream_video(file_path1, file_path2, file_path3, res):
             grabbed3, frame3 = vid3.read()
             if grabbed3:
                 frame3 = cv2.resize(frame3, dimensions)
-                write_to_db(yolo.predict(frame3), os.path.basename(file_path3), frame_no)
+                detections = yolo.predict(frame3)
+                points += plot_object(H3, detections, frame3)
+                write_to_db(detections, os.path.basename(file_path3), frame_no)
                 frame3_warp = cv2.warpPerspective(frame3, H3, STD_DIMENSIONS["720p"])
             # else:
             #     frame3_warp = empty.copy()
@@ -135,15 +151,22 @@ def stream_video(file_path1, file_path2, file_path3, res):
             final = np.zeros((a.shape))
             final = np.where(np.logical_and(a != 0, b != 0, c != 0), (a + b + c) / 3, final)
             final = np.where(np.logical_or(np.logical_and(a == 0, np.logical_xor(b == 0, c == 0)),
-                                       np.logical_and(c == 0, np.logical_xor(a == 0, b == 0)),
-                                       np.logical_and(b == 0, np.logical_xor(a == 0, c == 0))), a + b + c, final)
+                                           np.logical_and(c == 0, np.logical_xor(a == 0, b == 0)),
+                                           np.logical_and(b == 0, np.logical_xor(a == 0, c == 0))), a + b + c, final)
             final = np.where(np.logical_or(np.logical_and(a != 0, np.logical_xor(b == 0, c == 0)),
-                                       np.logical_and(c != 0, np.logical_xor(a == 0, b == 0)),
-                                       np.logical_and(b != 0, np.logical_xor(a == 0, c == 0))), (a + b + c) / 2, final)
+                                           np.logical_and(c != 0, np.logical_xor(a == 0, b == 0)),
+                                           np.logical_and(b != 0, np.logical_xor(a == 0, c == 0))), (a + b + c) / 2, final)
+
+            # final = top_view
+
+            frame_points.append(points)
+            some = sum(frame_points, [])
+            final = heatmap(some, top_view)
+
         except:
             pass
 
-        flag, encoded_image = cv2.imencode(".jpg", final * 255)
+        flag, encoded_image = cv2.imencode(".jpg", cv2.cvtColor((final * 255).astype(np.float32), cv2.COLOR_RGB2BGR))
 
         if not flag:
             continue
@@ -203,7 +226,8 @@ def detect_objects(source, address, filename, res, yolo, stream_output, lock):
             frame_no += 1
             grabbed, frame = source.read()
             frame = cv2.resize(frame, dimensions)
-
+            with lock:
+                stream_output[0] = frame.copy() if isinstance(frame, np.ndarray) else frame
             if filename:
                 out.write(frame)
 
@@ -212,8 +236,8 @@ def detect_objects(source, address, filename, res, yolo, stream_output, lock):
         except:
             frame = None
 
-        with lock:
-            stream_output[0] = frame.copy() if isinstance(frame, np.ndarray) else frame
+        # with lock:
+        #     stream_output[0] = frame.copy() if isinstance(frame, np.ndarray) else frame
 
 
 def stream_live(output_frame, lock):
