@@ -13,9 +13,25 @@ from heatmap import heatmap
 from utils import get_video_type, get_dims, STD_DIMENSIONS
 from yolo.yolo import YOLO
 
+from collections import deque, Counter
+import cv2
+import imutils
+import numpy as np
+import torch
+import torchvision.transforms as T
+from PIL import Image
+from flask import Flask, Response, render_template
+from imutils.video import VideoStream
+from keras import backend
+
+from models.base_block import FeatClassifier, BaseClassifier
+from models.resnet import resnet50
+from tools import generate_detections as gdet
+from yolo import YOLO
+
 app = Flask(__name__)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/survillance.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/surveillance.db'
 db = SQLAlchemy(app)
 
 
@@ -100,7 +116,72 @@ def plot_object(h_phary, detections, frame1):
     return points
 
 
+def model_init_par():
+    # model
+    backbone = resnet50()
+    classifier = BaseClassifier(nattr=6)
+    model = FeatClassifier(backbone, classifier)
+
+    # load
+    checkpoint = torch.load('./exp_result/custom/custom/img_model/ckpt_max.pth')
+    # unfolded load
+    # state_dict = checkpoint['state_dicts']
+    # new_state_dict = OrderedDict()
+    # for k, v in state_dict.items():
+    #     name = k[7:]
+    #     new_state_dict[name] = v
+    # model.load_state_dict(new_state_dict)
+    # one-liner load
+    # if torch.cuda.is_available():
+    #     model = torch.nn.DataParallel(model).cuda()
+    #     model.load_state_dict(checkpoint['state_dicts'])
+    # else:
+    model.load_state_dict({k.replace('module.', ''): v for k, v in checkpoint['state_dicts'].items()})
+    # cuda eval
+    model.cuda()
+    model.eval()
+
+    # valid_transform
+    height, width = 256, 192
+    normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    valid_transform = T.Compose([
+        T.Resize((height, width)),
+        T.ToTensor(),
+        normalize
+    ])
+    return model, valid_transform
+
+
+def demo_par(model, valid_transform, img):
+    # load one image
+    img_trans = valid_transform(img)
+    imgs = torch.unsqueeze(img_trans, dim=0)
+    imgs = imgs.cuda()
+    valid_logits = model(imgs)
+    valid_probs = torch.sigmoid(valid_logits)
+    score = valid_probs.data.cpu().numpy()
+
+    # show the score in the image
+    txt_res = []
+    age_group = []
+    gender = []
+    txt = ""
+    for idx in range(len(values)):
+        if score[0, idx] >= 0.5:
+            temp = '%s: %.2f ' % (values[idx], score[0, idx])
+            if idx < 4:
+                age_group.append(values[idx])
+            else:
+                gender.append(values[idx])
+            # txt += temp
+            txt_res.append(temp)
+    return txt_res, age_group, gender
+
+
 def stream_video(file_path1, file_path2, file_path3, res):
+
+    model_par, valid_transform = model_init_par()
+
     vid = cv2.VideoCapture(file_path1)
     vid2 = cv2.VideoCapture(file_path2)
     vid3 = cv2.VideoCapture(file_path3)
@@ -148,6 +229,7 @@ def stream_video(file_path1, file_path2, file_path3, res):
             a = frame1_warp / 255
             b = frame2_warp / 255
             c = frame3_warp / 255
+
             final = np.zeros((a.shape))
             final = np.where(np.logical_and(a != 0, b != 0, c != 0), (a + b + c) / 3, final)
             final = np.where(np.logical_or(np.logical_and(a == 0, np.logical_xor(b == 0, c == 0)),
@@ -287,7 +369,7 @@ cam1_t.start()
 
 
 cam2_t = threading.Thread(target=detect_objects, args=(mob_cam2,
-                                                       0,  # 'http://10.47.27.57:8080/video',
+                                                       0,
                                                        f'cam2_{suffix}.avi', 'custom',
                                                        YOLO(), stream_output2, lock2))  # Thread for camera 3
 cam2_t.daemon = True
@@ -295,7 +377,7 @@ cam2_t.start()
 
 
 cam3_t = threading.Thread(target=detect_objects, args=(mob_cam3,
-                                                       0,  # 'http://192.168.100.7:8080/video',
+                                                       0,
                                                        f'cam3_{suffix}.avi', 'custom',
                                                        YOLO(), stream_output3, lock3))  # Thread for camera 2
 cam3_t.daemon = True
