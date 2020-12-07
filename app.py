@@ -396,7 +396,7 @@ def stream_top_static():
         points = stream_output1[1] + stream_output2[1] + stream_output3[1]
         write_to_db_top(points, frame_no)
         for point in points:
-            cv2.circle(final, (point[0], point[1]), 3, (255, 0, 0), -1)
+            cv2.circle(final, (point[0], point[1]), 5, (0, 0, 255), -1)
 
         flag, encoded_image = cv2.imencode(".jpg", final)
         if not flag:
@@ -415,26 +415,27 @@ today = datetime.now()
 suffix = today.strftime('%m_%d_%Y_%H')
 
 
-cam1_t = threading.Thread(target=detect_objects, args=(web_cam1, 0, f'cam1_{suffix}.avi', 'custom',
+cam1_t = threading.Thread(target=detect_objects, args=(web_cam1, 'http://192.168.137.67:8080/video',
+                                                       f'cam1_{suffix}.avi', 'custom',
                                                        YOLO(), stream_output1, lock1, H1))  # Thread for camera 2
 cam1_t.daemon = True
 cam1_t.start()
 
-
-cam2_t = threading.Thread(target=detect_objects, args=(mob_cam2,
-                                                       0,  # 'http://10.47.27.57:8080/video',
-                                                       f'cam2_{suffix}.avi', 'custom',
-                                                       YOLO(), stream_output2, lock2, H2))  # Thread for camera 3
-cam2_t.daemon = True
-cam2_t.start()
-
-
-cam3_t = threading.Thread(target=detect_objects, args=(mob_cam3,
-                                                       0,  # 'http://192.168.100.7:8080/video',
-                                                       f'cam3_{suffix}.avi', 'custom',
-                                                       YOLO(), stream_output3, lock3, H3))  # Thread for camera 2
-cam3_t.daemon = True
-cam3_t.start()
+#
+# cam2_t = threading.Thread(target=detect_objects, args=(mob_cam2,
+#                                                        'http://192.168.100.11:8080/video',
+#                                                        f'cam2_{suffix}.avi', 'custom',
+#                                                        YOLO(), stream_output2, lock2, H2))  # Thread for camera 3
+# cam2_t.daemon = True
+# cam2_t.start()
+#
+#
+# cam3_t = threading.Thread(target=detect_objects, args=(mob_cam3,
+#                                                        'http://192.168.100.11:8080/video',
+#                                                        f'cam3_{suffix}.avi', 'custom',
+#                                                        YOLO(), stream_output3, lock3, H3))  # Thread for camera 2
+# cam3_t.daemon = True
+# cam3_t.start()
 
 
 if __name__ == '__main__':
