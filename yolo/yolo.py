@@ -1,8 +1,21 @@
 import cv2
 import numpy as np
+import cv2
+import imutils
+import numpy as np
+import torch
+import torchvision.transforms as T
+from PIL import Image
+from flask import Flask, Response, render_template
+from imutils.video import VideoStream
+# from keras import backend
+
+from models.base_block import FeatClassifier, BaseClassifier
+from models.resnet import resnet50
 
 np.random.seed(42)
 
+values = ['Age1-16', 'Age17-30', 'Age31-45', 'Age46-60', 'Female', 'Male']
 
 class YOLO:
     ACCEPTED_CLASSES = ["person"]
@@ -17,7 +30,7 @@ class YOLO:
         self.layer_names = self.net.getLayerNames()
         self.layer_names = [self.layer_names[i[0] - 1] for i in self.net.getUnconnectedOutLayers()]
 
-    def predict(self, frame, thresh=0.1, draw=True):
+    def predict(self, frame, thresh=0.1, model_par=None, valid_transform=None, draw=True, attribute_detect=False):
         H, W = frame.shape[:2]
         blob = cv2.dnn.blobFromImage(frame, 1 / 255.0, (416, 416), swapRB=True, crop=False)
         self.net.setInput(blob)
@@ -60,6 +73,37 @@ class YOLO:
                     color = [int(c) for c in self.COLORS[class_ids[i]]]
                     cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
                     text = "{}: {:.4f}".format(self.classes[class_ids[i]], confidences[i])
-                    cv2.putText(frame, text, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                    # cv2.putText(frame, text, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                if attribute_detect:
+                    image = Image.fromarray(frame[..., ::-1])
+                    crop_img = image.crop([int(x), int(y), int(x+w), int(y+h)])
+                    attributes, age_group, gender = demo_par(model_par, valid_transform, crop_img)
+                    cv2.putText(frame, str(attributes), (int(x), int(y - 10)), 0, 5e-3 * 150, color, 2)
 
         return detections
+
+
+def demo_par(model, valid_transform, img):
+    # load one image
+    img_trans = valid_transform(img)
+    imgs = torch.unsqueeze(img_trans, dim=0)
+    imgs = imgs.cuda()
+    valid_logits = model(imgs)
+    valid_probs = torch.sigmoid(valid_logits)
+    score = valid_probs.data.cpu().numpy()
+
+    # show the score in the image
+    txt_res = []
+    age_group = []
+    gender = []
+    txt = ""
+    for idx in range(len(values)):
+        if score[0, idx] >= 0.5:
+            temp = '%s: %.2f ' % (values[idx], score[0, idx])
+            if idx < 4:
+                age_group.append(values[idx])
+            else:
+                gender.append(values[idx])
+            # txt += temp
+            txt_res.append(temp)
+    return txt_res, age_group, gender

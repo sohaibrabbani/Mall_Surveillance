@@ -22,18 +22,45 @@ import torchvision.transforms as T
 from PIL import Image
 from flask import Flask, Response, render_template
 from imutils.video import VideoStream
-from keras import backend
+# from keras import backend
 
 from models.base_block import FeatClassifier, BaseClassifier
 from models.resnet import resnet50
-from tools import generate_detections as gdet
-from yolo import YOLO
+# from tools import generate_detections as gdet
+
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/surveillance.db'
 db = SQLAlchemy(app)
+# yolo = YOLO()
 
+
+def model_init_par():
+    # model
+    backbone = resnet50()
+    classifier = BaseClassifier(nattr=6)
+    model = FeatClassifier(backbone, classifier)
+
+    # load
+    checkpoint = torch.load('./exp_result/custom/custom/img_model/ckpt_max.pth')
+    model.load_state_dict({k.replace('module.', ''): v for k, v in checkpoint['state_dicts'].items()})
+    # cuda eval
+    model.cuda()
+    model.eval()
+
+    # valid_transform
+    height, width = 256, 192
+    normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    valid_transform = T.Compose([
+        T.Resize((height, width)),
+        T.ToTensor(),
+        normalize
+    ])
+    return model, valid_transform
+
+
+model_par, valid_transform = model_init_par()
 
 lock1 = threading.Lock()
 stream_output1 = [np.zeros((100, 100)), ]
@@ -116,76 +143,39 @@ def plot_object(h_phary, detections, frame1):
     return points
 
 
-def model_init_par():
-    # model
-    backbone = resnet50()
-    classifier = BaseClassifier(nattr=6)
-    model = FeatClassifier(backbone, classifier)
 
-    # load
-    checkpoint = torch.load('./exp_result/custom/custom/img_model/ckpt_max.pth')
-    # unfolded load
-    # state_dict = checkpoint['state_dicts']
-    # new_state_dict = OrderedDict()
-    # for k, v in state_dict.items():
-    #     name = k[7:]
-    #     new_state_dict[name] = v
-    # model.load_state_dict(new_state_dict)
-    # one-liner load
-    # if torch.cuda.is_available():
-    #     model = torch.nn.DataParallel(model).cuda()
-    #     model.load_state_dict(checkpoint['state_dicts'])
-    # else:
-    model.load_state_dict({k.replace('module.', ''): v for k, v in checkpoint['state_dicts'].items()})
-    # cuda eval
-    model.cuda()
-    model.eval()
-
-    # valid_transform
-    height, width = 256, 192
-    normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    valid_transform = T.Compose([
-        T.Resize((height, width)),
-        T.ToTensor(),
-        normalize
-    ])
-    return model, valid_transform
-
-
-def demo_par(model, valid_transform, img):
-    # load one image
-    img_trans = valid_transform(img)
-    imgs = torch.unsqueeze(img_trans, dim=0)
-    imgs = imgs.cuda()
-    valid_logits = model(imgs)
-    valid_probs = torch.sigmoid(valid_logits)
-    score = valid_probs.data.cpu().numpy()
-
-    # show the score in the image
-    txt_res = []
-    age_group = []
-    gender = []
-    txt = ""
-    for idx in range(len(values)):
-        if score[0, idx] >= 0.5:
-            temp = '%s: %.2f ' % (values[idx], score[0, idx])
-            if idx < 4:
-                age_group.append(values[idx])
-            else:
-                gender.append(values[idx])
-            # txt += temp
-            txt_res.append(temp)
-    return txt_res, age_group, gender
+# def demo_par(model, valid_transform, img):
+#     # load one image
+#     img_trans = valid_transform(img)
+#     imgs = torch.unsqueeze(img_trans, dim=0)
+#     imgs = imgs.cuda()
+#     valid_logits = model(imgs)
+#     valid_probs = torch.sigmoid(valid_logits)
+#     score = valid_probs.data.cpu().numpy()
+#
+#     # show the score in the image
+#     txt_res = []
+#     age_group = []
+#     gender = []
+#     txt = ""
+#     for idx in range(len(values)):
+#         if score[0, idx] >= 0.5:
+#             temp = '%s: %.2f ' % (values[idx], score[0, idx])
+#             if idx < 4:
+#                 age_group.append(values[idx])
+#             else:
+#                 gender.append(values[idx])
+#             # txt += temp
+#             txt_res.append(temp)
+#     return txt_res, age_group, gender
 
 
 def stream_video(file_path1, file_path2, file_path3, res):
 
-    model_par, valid_transform = model_init_par()
 
     vid = cv2.VideoCapture(file_path1)
     vid2 = cv2.VideoCapture(file_path2)
     vid3 = cv2.VideoCapture(file_path3)
-    yolo = YOLO()
     dimensions = get_dims(vid, res)
     top_view = cv2.cvtColor(cv2.imread('data/top_view_720p.jpg'), cv2.COLOR_BGR2RGB) / 255
     frame_no = 0
@@ -197,11 +187,10 @@ def stream_video(file_path1, file_path2, file_path3, res):
             grabbed1, frame1 = vid.read()
             if grabbed1:
                 frame1 = cv2.resize(frame1, dimensions)
-                detections = yolo.predict(frame1)
+                detections = yolo.predict(frame1, model_par=model_par, valid_transform=valid_transform, attribute_detect=True)
                 points = plot_object(H1, detections, frame1)
                 write_to_db(detections, os.path.basename(file_path1), frame_no)
                 frame1_warp = cv2.warpPerspective(frame1, H1, STD_DIMENSIONS["720p"])
-
             # else:
                 # frame1_warp = empty.copy()
 
@@ -308,12 +297,14 @@ def detect_objects(source, address, filename, res, yolo, stream_output, lock):
             frame_no += 1
             grabbed, frame = source.read()
             frame = cv2.resize(frame, dimensions)
+            # original_frame = frame.copy()
+            write_to_db(yolo.predict(frame, model_par=model_par, valid_transform=valid_transform, attribute_detect=True), filename, frame_no)
             with lock:
                 stream_output[0] = frame.copy() if isinstance(frame, np.ndarray) else frame
             if filename:
                 out.write(frame)
 
-            write_to_db(yolo.predict(frame), filename, frame_no)
+
 
         except:
             frame = None
@@ -362,14 +353,16 @@ today = datetime.now()
 suffix = today.strftime('%m_%d_%Y_%H')
 
 
-cam1_t = threading.Thread(target=detect_objects, args=(web_cam1, 0, f'cam1_{suffix}.avi', 'custom',
+cam1_t = threading.Thread(target=detect_objects, args=(web_cam1,
+                                                       'http://192.168.100.11:8080/video',
+                                                       f'cam1_{suffix}.avi', 'custom',
                                                        YOLO(), stream_output1, lock1))  # Thread for camera 2
 cam1_t.daemon = True
 cam1_t.start()
 
 
 cam2_t = threading.Thread(target=detect_objects, args=(mob_cam2,
-                                                       0,
+                                                       'http://192.168.100.11:8080/video',
                                                        f'cam2_{suffix}.avi', 'custom',
                                                        YOLO(), stream_output2, lock2))  # Thread for camera 3
 cam2_t.daemon = True
@@ -377,7 +370,7 @@ cam2_t.start()
 
 
 cam3_t = threading.Thread(target=detect_objects, args=(mob_cam3,
-                                                       0,
+                                                       'http://192.168.100.11:8080/video',
                                                        f'cam3_{suffix}.avi', 'custom',
                                                        YOLO(), stream_output3, lock3))  # Thread for camera 2
 cam3_t.daemon = True
