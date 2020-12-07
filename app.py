@@ -47,6 +47,8 @@ def model_init_par():
 
 
 model_par, valid_transform = model_init_par()
+today = datetime.now()
+suffix = today.strftime('%m_%d_%Y_%H')
 
 H1 = np.array([
     [-0.4267572874811169, 0.12202433258793428, 679.1648279868555],
@@ -121,10 +123,10 @@ def write_to_db(detections, filename, frame_no):
     db.session.commit()
 
 
-def write_to_db_top(points, frame_no):
+def write_to_db_top(points, frame_no, source1=f'cam1_{suffix}.avi', source2=f'cam2_{suffix}.avi', source3=f'cam3_{suffix}.avi'):
     for point in points:
         top_point = TopPoint(x=point[0], y=point[1], frame_no=frame_no,
-                             source1=f'cam1_{suffix}.avi', source2=f'cam2_{suffix}.avi', source3=f'cam3_{suffix}.avi')
+                             source1=source1, source2=source2, source3=source3)
         db.session.add(top_point)
     db.session.commit()
 
@@ -193,7 +195,7 @@ def stream_video_homography(file_path1, file_path2, file_path3, res):
 
         offline_points[0] = points.copy()
 
-        write_to_db_top(points, frame_no)
+        write_to_db_top(points, frame_no, source1=file_path1, source2=file_path2, source3=file_path3)
         # frame_points.append(points)
         # some = sum(frame_points, [])
         # final = heatmap(some, top_view)
@@ -387,9 +389,12 @@ def top_live():
 
 def stream_top_static():
     top_view = cv2.imread('data/top_view_720p.jpg')
+    frame_no = 0
     while True:
+        frame_no += 1
         final = top_view.copy()
         points = stream_output1[1] + stream_output2[1] + stream_output3[1]
+        write_to_db_top(points, frame_no)
         for point in points:
             cv2.circle(final, (point[0], point[1]), 3, (255, 0, 0), -1)
 
