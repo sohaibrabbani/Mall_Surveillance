@@ -14,19 +14,13 @@ from werkzeug.utils import secure_filename
 from heatmap import heatmap
 from models.base_block import FeatClassifier, BaseClassifier
 from models.resnet import resnet50
-from utils import get_video_type, get_dims, STD_DIMENSIONS
+from utils import get_video_type, get_dims, STD_DIMENSIONS, plot_object
 from yolo.yolo import YOLO
-
-# from keras import backend
-# from tools import generate_detections as gdet
-
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/surveillance.db'
 db = SQLAlchemy(app)
-# yolo = YOLO()
-
 
 def model_init_par():
     # model
@@ -54,24 +48,6 @@ def model_init_par():
 
 model_par, valid_transform = model_init_par()
 
-lock1 = threading.Lock()
-stream_output1 = [np.zeros((100, 100)), ]
-
-lock2 = threading.Lock()
-stream_output2 = [np.zeros((100, 100)), ]
-
-lock3 = threading.Lock()
-stream_output3 = [np.zeros((100, 100)), ]
-
-# global sources for video feeds
-web_cam1 = cv2.VideoCapture()  # web-cam feed
-mob_cam2 = cv2.VideoCapture()  # mobile cam 1
-mob_cam3 = cv2.VideoCapture()  # mobile cam 2
-
-
-FPS = 2
-
-
 H1 = np.array([
     [-0.4267572874811169, 0.12202433258793428, 679.1648279868555],
     [0.07855525944118393, 0.5634066050345926, 156.2850020670053],
@@ -91,6 +67,24 @@ H3 = np.array([
 ])
 
 
+lock1 = threading.Lock()
+stream_output1 = [np.zeros((100, 100, 3)), []]
+
+lock2 = threading.Lock()
+stream_output2 = [np.zeros((100, 100, 3)), []]
+
+lock3 = threading.Lock()
+stream_output3 = [np.zeros((100, 100, 3)), []]
+
+# global sources for video feeds
+web_cam1 = cv2.VideoCapture()  # web-cam feed
+mob_cam2 = cv2.VideoCapture()  # mobile cam 1
+mob_cam3 = cv2.VideoCapture()  # mobile cam 2
+
+
+FPS = 2
+
+
 class Object(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     x = db.Column(db.Integer)
@@ -105,12 +99,33 @@ class Object(db.Model):
         return f'<Object x: {self.x}, y: {self.y}, w:{self.w}, h:{self.h}, class: {self.name}>'
 
 
+class TopPoint(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    x = db.Column(db.Integer)
+    y = db.Column(db.Integer)
+    source1 = db.Column(db.String(200))
+    source2 = db.Column(db.String(200))
+    source3 = db.Column(db.String(200))
+    frame_no = db.Column(db.Integer)
+
+    def __repr__(self):
+        return f'<TopPoint x: {self.x}, y: {self.y}>'
+
+
 def write_to_db(detections, filename, frame_no):
     for detection in detections:
         detection['frame_no'] = frame_no
         detection['source'] = filename
         object = Object(**detection)
         db.session.add(object)
+    db.session.commit()
+
+
+def write_to_db_top(points, frame_no):
+    for point in points:
+        top_point = TopPoint(x=point[0], y=point[1], frame_no=frame_no,
+                             source1=f'cam1_{suffix}.avi', source2=f'cam2_{suffix}.avi', source3=f'cam3_{suffix}.avi')
+        db.session.add(top_point)
     db.session.commit()
 
 
@@ -126,81 +141,64 @@ def live():
     return render_template("live.html")
 
 
-# file_path3,
-def plot_object(h_phary, detections, frame1):
-    points = []
-    for d in detections:
-        point = np.array([d['x'], d['y'], 1])
-        points.append(h_phary.dot(point).astype(int))
-    return points
+offline_points = [[], ]
 
 
-def stream_video(file_path1, file_path2, file_path3, res):
+def stream_video_homography(file_path1, file_path2, file_path3, res):
     vid = cv2.VideoCapture(file_path1)
     vid2 = cv2.VideoCapture(file_path2)
     vid3 = cv2.VideoCapture(file_path3)
-    dimensions = get_dims(vid, res)
-    top_view = cv2.cvtColor(cv2.imread('data/top_view_720p.jpg'), cv2.COLOR_BGR2RGB) / 255
+    yolo = YOLO()
     frame_no = 0
     frame_points = []
     while vid.isOpened() or vid2.isOpened() or vid3.isOpened():
         points = []
-        try:
-            frame_no += 1
-            grabbed1, frame1 = vid.read()
-            if grabbed1:
-                frame1 = cv2.resize(frame1, dimensions)
-                detections = yolo.predict(frame1, model_par=model_par, valid_transform=valid_transform, attribute_detect=True)
-                points = plot_object(H1, detections, frame1)
-                write_to_db(detections, os.path.basename(file_path1), frame_no)
-                frame1_warp = cv2.warpPerspective(frame1, H1, STD_DIMENSIONS["720p"])
-            # else:
-                # frame1_warp = empty.copy()
+        frame_no += 1
+        grabbed1, frame1 = vid.read()
+        if grabbed1:
+            frame1 = cv2.resize(frame1, STD_DIMENSIONS["720p"])
+            detections = yolo.predict(frame1, model_par=model_par, valid_transform=valid_transform, attribute_detect=True)
+            points = plot_object(H1, detections)
+            write_to_db(detections, os.path.basename(file_path1), frame_no)
+            frame1_warp = cv2.warpPerspective(frame1, H1, STD_DIMENSIONS["720p"])
 
-            grabbed2, frame2 = vid2.read()
-            if grabbed2:
-                frame2 = np.rot90(frame2, 2)
-                frame2 = cv2.resize(frame2, dimensions)
-                detections = yolo.predict(frame2)
-                points += plot_object(H2, detections, frame2)
-                write_to_db(detections, os.path.basename(file_path2), frame_no)
-                frame2_warp = cv2.warpPerspective(frame2, H2, STD_DIMENSIONS["720p"])
-            # else:
-            #     frame2_warp = empty.copy()
+        grabbed2, frame2 = vid2.read()
+        if grabbed2:
+            frame2 = np.rot90(frame2, 2)
+            frame2 = cv2.resize(frame2, STD_DIMENSIONS["720p"])
+            detections = yolo.predict(frame2, model_par=model_par, valid_transform=valid_transform, attribute_detect=True)
+            points += plot_object(H2, detections)
+            write_to_db(detections, os.path.basename(file_path2), frame_no)
+            frame2_warp = cv2.warpPerspective(frame2, H2, STD_DIMENSIONS["720p"])
 
-            grabbed3, frame3 = vid3.read()
-            if grabbed3:
-                frame3 = cv2.resize(frame3, dimensions)
-                detections = yolo.predict(frame3)
-                points += plot_object(H3, detections, frame3)
-                write_to_db(detections, os.path.basename(file_path3), frame_no)
-                frame3_warp = cv2.warpPerspective(frame3, H3, STD_DIMENSIONS["720p"])
-            # else:
-            #     frame3_warp = empty.copy()
+        grabbed3, frame3 = vid3.read()
+        if grabbed3:
+            frame3 = cv2.resize(frame3, STD_DIMENSIONS["720p"])
+            detections = yolo.predict(frame3, model_par=model_par, valid_transform=valid_transform, attribute_detect=True)
+            points += plot_object(H3, detections)
+            write_to_db(detections, os.path.basename(file_path3), frame_no)
+            frame3_warp = cv2.warpPerspective(frame3, H3, STD_DIMENSIONS["720p"])
 
-            a = frame1_warp / 255
-            b = frame2_warp / 255
-            c = frame3_warp / 255
+        a = frame1_warp / 255
+        b = frame2_warp / 255
+        c = frame3_warp / 255
+        final = np.zeros((a.shape))
+        final = np.where(np.logical_and(a != 0, b != 0, c != 0), (a + b + c) / 3, final)
+        final = np.where(np.logical_or(np.logical_and(a == 0, np.logical_xor(b == 0, c == 0)),
+                                       np.logical_and(c == 0, np.logical_xor(a == 0, b == 0)),
+                                       np.logical_and(b == 0, np.logical_xor(a == 0, c == 0))), a + b + c, final)
+        final = np.where(np.logical_or(np.logical_and(a != 0, np.logical_xor(b == 0, c == 0)),
+                                       np.logical_and(c != 0, np.logical_xor(a == 0, b == 0)),
+                                       np.logical_and(b != 0, np.logical_xor(a == 0, c == 0))), (a + b + c) / 2, final)
 
-            final = np.zeros((a.shape))
-            final = np.where(np.logical_and(a != 0, b != 0, c != 0), (a + b + c) / 3, final)
-            final = np.where(np.logical_or(np.logical_and(a == 0, np.logical_xor(b == 0, c == 0)),
-                                           np.logical_and(c == 0, np.logical_xor(a == 0, b == 0)),
-                                           np.logical_and(b == 0, np.logical_xor(a == 0, c == 0))), a + b + c, final)
-            final = np.where(np.logical_or(np.logical_and(a != 0, np.logical_xor(b == 0, c == 0)),
-                                           np.logical_and(c != 0, np.logical_xor(a == 0, b == 0)),
-                                           np.logical_and(b != 0, np.logical_xor(a == 0, c == 0))), (a + b + c) / 2, final)
+        offline_points[0] = points.copy()
 
-            # final = top_view
+        write_to_db_top(points, frame_no)
+        # frame_points.append(points)
+        # some = sum(frame_points, [])
+        # final = heatmap(some, top_view)
 
-            frame_points.append(points)
-            some = sum(frame_points, [])
-            final = heatmap(some, top_view)
-
-        except:
-            pass
-
-        flag, encoded_image = cv2.imencode(".jpg", cv2.cvtColor((final * 255).astype(np.float32), cv2.COLOR_RGB2BGR))
+        flag, encoded_image = cv2.imencode(".jpg", (final * 255).astype(np.float32))
 
         if not flag:
             continue
@@ -208,8 +206,8 @@ def stream_video(file_path1, file_path2, file_path3, res):
         yield b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encoded_image) + b'\r\n'
 
 
-@app.route('/video')
-def video():
+@app.route('/video_homo')
+def video_homo():
     filename1 = request.args.get('filename1', '')
     filename2 = request.args.get('filename2', '')
     filename3 = request.args.get('filename3', '')
@@ -217,8 +215,28 @@ def video():
     file_path1 = os.path.join(basepath, 'static', secure_filename(filename1))
     file_path2 = os.path.join(basepath, 'static', secure_filename(filename2))
     file_path3 = os.path.join(basepath, 'static', secure_filename(filename3))
-    return Response(stream_video(file_path1, file_path2, file_path3, '720p'),
+    return Response(stream_video_homography(file_path1, file_path2, file_path3, '720p'),
                     mimetype="multipart/x-mixed-replace; boundary=frame")
+
+
+def stream_video_top():
+    top_view = cv2.imread('data/top_view_720p.jpg')
+    while True:
+        final = top_view.copy()
+        for point in offline_points[0]:
+            cv2.circle(final, (point[0], point[1]), 6, (0, 0, 255), -1)
+
+        flag, encoded_image = cv2.imencode(".jpg", final)
+        if not flag:
+            continue
+        try:
+            yield b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encoded_image) + b'\r\n'
+        except:
+            pass
+
+@app.route('/offline_top')
+def offline_top():
+    return Response(stream_video_top(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
 # Home page for displaying the camera feeds
@@ -247,7 +265,7 @@ def offline():
     return None
 
 
-def detect_objects(source, address, filename, res, yolo, stream_output, lock):
+def detect_objects(source, address, filename, res, yolo, stream_output, lock, H):
     dimensions = get_dims(source, res)
     if filename:
         out = cv2.VideoWriter('data/'+filename, get_video_type(filename), FPS, dimensions)
@@ -260,14 +278,16 @@ def detect_objects(source, address, filename, res, yolo, stream_output, lock):
             frame_no += 1
             grabbed, frame = source.read()
             frame = cv2.resize(frame, dimensions)
-            # original_frame = frame.copy()
-            write_to_db(yolo.predict(frame, model_par=model_par, valid_transform=valid_transform, attribute_detect=True), filename, frame_no)
-            with lock:
-                stream_output[0] = frame.copy() if isinstance(frame, np.ndarray) else frame
             if filename:
                 out.write(frame)
 
+            detections = yolo.predict(frame, model_par=model_par, valid_transform=valid_transform, attribute_detect=True)
 
+            with lock:
+                stream_output[0] = frame.copy() if isinstance(frame, np.ndarray) else frame
+                stream_output[1] = plot_object(H, detections)
+
+            write_to_db(detections, filename, frame_no)
 
         except:
             frame = None
@@ -312,30 +332,102 @@ def cam3():
                     mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
+# Streaming response endpoint for camera 1
+def stream_top_live():
+    dimensions = STD_DIMENSIONS["720p"]
+    while True:
+        points = []
+        if stream_output1[0] is not None:
+            frame1 = stream_output1[0]
+            frame1 = cv2.resize(frame1, dimensions)
+            points += stream_output1[1]
+            frame1_warp = cv2.warpPerspective(frame1, H1, dimensions)
+
+        if stream_output2[0] is not None:
+            frame2 = stream_output2[0]
+            frame2 = cv2.resize(frame2, dimensions)
+            points += stream_output2[1]
+            frame2_warp = cv2.warpPerspective(frame2, H2, dimensions)
+
+        if stream_output3[0] is not None:
+            frame3 = stream_output3[0]
+            frame3 = cv2.resize(frame3, dimensions)
+            points += stream_output3[1]
+            frame3_warp = cv2.warpPerspective(frame3, H3, dimensions)
+
+        try:
+            a = frame1_warp / 255
+            b = frame2_warp / 255
+            c = frame3_warp / 255
+
+
+            final = np.zeros((a.shape))
+            final = np.where(np.logical_and(a != 0, b != 0, c != 0), (a + b + c) / 3, final)
+            final = np.where(np.logical_or(np.logical_and(a == 0, np.logical_xor(b == 0, c == 0)),
+                                           np.logical_and(c == 0, np.logical_xor(a == 0, b == 0)),
+                                           np.logical_and(b == 0, np.logical_xor(a == 0, c == 0))), a + b + c, final)
+            final = np.where(np.logical_or(np.logical_and(a != 0, np.logical_xor(b == 0, c == 0)),
+                                           np.logical_and(c != 0, np.logical_xor(a == 0, b == 0)),
+                                           np.logical_and(b != 0, np.logical_xor(a == 0, c == 0))), (a + b + c) / 2, final)
+
+            final = (final * 255).astype(np.float32)
+            flag, encoded_image = cv2.imencode(".jpg", final)
+        except:
+            pass
+        if not flag:
+            continue
+
+        yield b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encoded_image) + b'\r\n'
+
+
+@app.route("/top_live")
+def top_live():
+    return Response(stream_top_live(), mimetype="multipart/x-mixed-replace; boundary=frame")
+
+
+def stream_top_static():
+    top_view = cv2.imread('data/top_view_720p.jpg')
+    while True:
+        final = top_view.copy()
+        points = stream_output1[1] + stream_output2[1] + stream_output3[1]
+        for point in points:
+            cv2.circle(final, (point[0], point[1]), 3, (255, 0, 0), -1)
+
+        flag, encoded_image = cv2.imencode(".jpg", final)
+        if not flag:
+            continue
+
+        yield b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encoded_image) + b'\r\n'
+
+
+@app.route("/top_live_static")
+def top_live_static():
+    return Response(stream_top_static(), mimetype="multipart/x-mixed-replace; boundary=frame")
+
+
+
 today = datetime.now()
 suffix = today.strftime('%m_%d_%Y_%H')
 
 
-cam1_t = threading.Thread(target=detect_objects, args=(web_cam1,
-                                                       'http://192.168.100.11:8080/video',
-                                                       f'cam1_{suffix}.avi', 'custom',
-                                                       YOLO(), stream_output1, lock1))  # Thread for camera 2
+cam1_t = threading.Thread(target=detect_objects, args=(web_cam1, 0, f'cam1_{suffix}.avi', 'custom',
+                                                       YOLO(), stream_output1, lock1, H1))  # Thread for camera 2
 cam1_t.daemon = True
 cam1_t.start()
 
 
 cam2_t = threading.Thread(target=detect_objects, args=(mob_cam2,
-                                                       'http://192.168.100.11:8080/video',
+                                                       0,  # 'http://10.47.27.57:8080/video',
                                                        f'cam2_{suffix}.avi', 'custom',
-                                                       YOLO(), stream_output2, lock2))  # Thread for camera 3
+                                                       YOLO(), stream_output2, lock2, H2))  # Thread for camera 3
 cam2_t.daemon = True
 cam2_t.start()
 
 
 cam3_t = threading.Thread(target=detect_objects, args=(mob_cam3,
-                                                       'http://192.168.100.11:8080/video',
+                                                       0,  # 'http://192.168.100.7:8080/video',
                                                        f'cam3_{suffix}.avi', 'custom',
-                                                       YOLO(), stream_output3, lock3))  # Thread for camera 2
+                                                       YOLO(), stream_output3, lock3, H3))  # Thread for camera 2
 cam3_t.daemon = True
 cam3_t.start()
 
