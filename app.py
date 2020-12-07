@@ -4,28 +4,20 @@ from datetime import datetime
 
 import cv2
 import numpy as np
-from flask import Flask
-from flask import Response, render_template, request, redirect, flash, url_for
+import torch
+import torchvision.transforms as T
+from flask import Flask, Response, render_template
+from flask import request, redirect, flash, url_for
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 
 from heatmap import heatmap
+from models.base_block import FeatClassifier, BaseClassifier
+from models.resnet import resnet50
 from utils import get_video_type, get_dims, STD_DIMENSIONS
 from yolo.yolo import YOLO
 
-from collections import deque, Counter
-import cv2
-import imutils
-import numpy as np
-import torch
-import torchvision.transforms as T
-from PIL import Image
-from flask import Flask, Response, render_template
-from imutils.video import VideoStream
 # from keras import backend
-
-from models.base_block import FeatClassifier, BaseClassifier
-from models.resnet import resnet50
 # from tools import generate_detections as gdet
 
 
@@ -143,36 +135,7 @@ def plot_object(h_phary, detections, frame1):
     return points
 
 
-
-# def demo_par(model, valid_transform, img):
-#     # load one image
-#     img_trans = valid_transform(img)
-#     imgs = torch.unsqueeze(img_trans, dim=0)
-#     imgs = imgs.cuda()
-#     valid_logits = model(imgs)
-#     valid_probs = torch.sigmoid(valid_logits)
-#     score = valid_probs.data.cpu().numpy()
-#
-#     # show the score in the image
-#     txt_res = []
-#     age_group = []
-#     gender = []
-#     txt = ""
-#     for idx in range(len(values)):
-#         if score[0, idx] >= 0.5:
-#             temp = '%s: %.2f ' % (values[idx], score[0, idx])
-#             if idx < 4:
-#                 age_group.append(values[idx])
-#             else:
-#                 gender.append(values[idx])
-#             # txt += temp
-#             txt_res.append(temp)
-#     return txt_res, age_group, gender
-
-
 def stream_video(file_path1, file_path2, file_path3, res):
-
-
     vid = cv2.VideoCapture(file_path1)
     vid2 = cv2.VideoCapture(file_path2)
     vid3 = cv2.VideoCapture(file_path3)
