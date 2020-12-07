@@ -13,12 +13,13 @@ from werkzeug.utils import secure_filename
 from heatmap import heatmap
 from utils import get_video_type, get_dims, STD_DIMENSIONS
 from yolo.yolo import YOLO
+from shapely.geometry import Point
+from shapely.geometry.polygon import Polygon
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/survillance.db'
 db = SQLAlchemy(app)
-
 
 lock1 = threading.Lock()
 stream_output1 = [np.zeros((100, 100)), ]
@@ -80,6 +81,10 @@ class Perimeter(db.Model):
         return f'<Vertex x: {self.x}, y: {self.y}>'
 
 
+vertices = [(vertex.x, vertex.y) for vertex in Perimeter.query.all()]
+polygon = Polygon(vertices)
+
+
 def write_to_db(detections, filename, frame_no):
     for detection in detections:
         detection['frame_no'] = frame_no
@@ -110,71 +115,88 @@ def plot_object(h_phary, detections, frame1):
     return points
 
 
+def check_alert(points):
+    return any([polygon.contains(Point(p[0], p[1])) for p in points])
+
+
 def stream_video(file_path1, file_path2, file_path3, res):
     vid = cv2.VideoCapture(file_path1)
     vid2 = cv2.VideoCapture(file_path2)
     vid3 = cv2.VideoCapture(file_path3)
     yolo = YOLO()
     dimensions = get_dims(vid, res)
-    top_view = cv2.cvtColor(cv2.imread('data/top_view_720p.jpg'), cv2.COLOR_BGR2RGB) / 255
+
     frame_no = 0
     frame_points = []
+
     while vid.isOpened() or vid2.isOpened() or vid3.isOpened():
         points = []
-        try:
-            frame_no += 1
-            grabbed1, frame1 = vid.read()
-            if grabbed1:
-                frame1 = cv2.resize(frame1, dimensions)
-                detections = yolo.predict(frame1)
-                points = plot_object(H1, detections, frame1)
-                write_to_db(detections, os.path.basename(file_path1), frame_no)
-                frame1_warp = cv2.warpPerspective(frame1, H1, STD_DIMENSIONS["720p"])
+        frame_no += 1
+        grabbed1, frame1 = vid.read()
+        if grabbed1:
+            frame1 = cv2.resize(frame1, dimensions)
+            detections = yolo.predict(frame1)
+            points = plot_object(H1, detections, frame1)
 
-            # else:
-                # frame1_warp = empty.copy()
+            write_to_db(detections, os.path.basename(file_path1), frame_no)
+            frame1_warp = cv2.warpPerspective(frame1, H1, STD_DIMENSIONS["720p"])
 
-            grabbed2, frame2 = vid2.read()
-            if grabbed2:
-                frame2 = np.rot90(frame2, 2)
-                frame2 = cv2.resize(frame2, dimensions)
-                detections = yolo.predict(frame2)
-                points += plot_object(H2, detections, frame2)
-                write_to_db(detections, os.path.basename(file_path2), frame_no)
-                frame2_warp = cv2.warpPerspective(frame2, H2, STD_DIMENSIONS["720p"])
-            # else:
-            #     frame2_warp = empty.copy()
+        # else:
+            # frame1_warp = empty.copy()
 
-            grabbed3, frame3 = vid3.read()
-            if grabbed3:
-                frame3 = cv2.resize(frame3, dimensions)
-                detections = yolo.predict(frame3)
-                points += plot_object(H3, detections, frame3)
-                write_to_db(detections, os.path.basename(file_path3), frame_no)
-                frame3_warp = cv2.warpPerspective(frame3, H3, STD_DIMENSIONS["720p"])
-            # else:
-            #     frame3_warp = empty.copy()
+        grabbed2, frame2 = vid2.read()
+        if grabbed2:
+            frame2 = np.rot90(frame2, 2)
+            frame2 = cv2.resize(frame2, dimensions)
+            detections = yolo.predict(frame2)
+            points += plot_object(H2, detections, frame2)
+            write_to_db(detections, os.path.basename(file_path2), frame_no)
+            frame2_warp = cv2.warpPerspective(frame2, H2, STD_DIMENSIONS["720p"])
+        # else:
+        #     frame2_warp = empty.copy()
 
-            a = frame1_warp / 255
-            b = frame2_warp / 255
-            c = frame3_warp / 255
-            final = np.zeros((a.shape))
-            final = np.where(np.logical_and(a != 0, b != 0, c != 0), (a + b + c) / 3, final)
-            final = np.where(np.logical_or(np.logical_and(a == 0, np.logical_xor(b == 0, c == 0)),
-                                           np.logical_and(c == 0, np.logical_xor(a == 0, b == 0)),
-                                           np.logical_and(b == 0, np.logical_xor(a == 0, c == 0))), a + b + c, final)
-            final = np.where(np.logical_or(np.logical_and(a != 0, np.logical_xor(b == 0, c == 0)),
-                                           np.logical_and(c != 0, np.logical_xor(a == 0, b == 0)),
-                                           np.logical_and(b != 0, np.logical_xor(a == 0, c == 0))), (a + b + c) / 2, final)
+        grabbed3, frame3 = vid3.read()
+        if grabbed3:
+            frame3 = cv2.resize(frame3, dimensions)
+            detections = yolo.predict(frame3)
+            points += plot_object(H3, detections, frame3)
+            write_to_db(detections, os.path.basename(file_path3), frame_no)
+            frame3_warp = cv2.warpPerspective(frame3, H3, STD_DIMENSIONS["720p"])
+        # else:
+        #     frame3_warp = empty.copy()
 
-            # final = top_view
+        a = frame1_warp / 255
+        b = frame2_warp / 255
+        c = frame3_warp / 255
+        final = np.zeros((a.shape))
+        final = np.where(np.logical_and(a != 0, b != 0, c != 0), (a + b + c) / 3, final)
+        final = np.where(np.logical_or(np.logical_and(a == 0, np.logical_xor(b == 0, c == 0)),
+                                       np.logical_and(c == 0, np.logical_xor(a == 0, b == 0)),
+                                       np.logical_and(b == 0, np.logical_xor(a == 0, c == 0))), a + b + c, final)
+        final = np.where(np.logical_or(np.logical_and(a != 0, np.logical_xor(b == 0, c == 0)),
+                                       np.logical_and(c != 0, np.logical_xor(a == 0, b == 0)),
+                                       np.logical_and(b != 0, np.logical_xor(a == 0, c == 0))), (a + b + c) / 2, final)
 
-            frame_points.append(points)
-            some = sum(frame_points, [])
-            final = heatmap(some, top_view)
+        # final = top_view
 
-        except:
-            pass
+        frame_points.append(points)
+        some = sum(frame_points, [])
+
+        top_view = cv2.imread('static/top_view_720p.jpg')
+        int_coords = lambda x: np.array(x).round().astype(np.int32)
+        exterior = [int_coords(polygon.exterior.coords)]
+        alpha = 0.5
+        overlay = top_view.copy()
+
+        if check_alert(points):
+            cv2.fillPoly(overlay, exterior, color=(0, 0, 255))
+        else:
+            cv2.fillPoly(overlay, exterior, color=(255, 255, 0))
+
+        cv2.addWeighted(overlay, alpha, top_view, 1 - alpha, 0, top_view)
+        top_view = cv2.cvtColor(top_view, cv2.COLOR_BGR2RGB) / 255
+        final = heatmap(some, top_view)
+
 
         flag, encoded_image = cv2.imencode(".jpg", cv2.cvtColor((final * 255).astype(np.float32), cv2.COLOR_RGB2BGR))
 
@@ -289,8 +311,10 @@ def cam3():
 today = datetime.now()
 suffix = today.strftime('%m_%d_%Y_%H')
 
-#
-# cam1_t = threading.Thread(target=detect_objects, args=(web_cam1, 0, f'cam1_{suffix}.avi', 'custom',
+
+# cam1_t = threading.Thread(target=detect_objects, args=(web_cam1,
+#                                                        'http://192.168.100.11:8080/video',
+#                                                        f'cam1_{suffix}.avi', 'custom',
 #                                                        YOLO(), stream_output1, lock1))  # Thread for camera 2
 # cam1_t.daemon = True
 # cam1_t.start()
