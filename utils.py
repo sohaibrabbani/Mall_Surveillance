@@ -1,6 +1,7 @@
 import os
 
 import cv2
+import numpy as np
 
 
 def change_res(cap, width, height):
@@ -40,3 +41,13 @@ def get_video_type(filename):
     if ext in VIDEO_TYPE:
         return VIDEO_TYPE[ext]
     return VIDEO_TYPE['.avi']
+
+
+def plot_object(H, detections):
+    # hp = H.dot(np.array([d['x']+d['w']/2, d['y']+d['h']/2, 1]))
+    # hp = (hp/hp[2]).astype(np.int)
+    if not detections:
+        return []
+
+    points = [[[d['x'] + d['w'] / 2, d['y'] + d['h'] / 2] for d in detections]]
+    return cv2.perspectiveTransform(np.array(points), m=H).astype(np.int)[0].tolist()
