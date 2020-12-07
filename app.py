@@ -2,6 +2,7 @@ import os
 import threading
 from datetime import datetime
 
+import json
 import cv2
 import numpy as np
 from flask import Flask
@@ -68,6 +69,15 @@ class Object(db.Model):
 
     def __repr__(self):
         return f'<Object x: {self.x}, y: {self.y}, w:{self.w}, h:{self.h}, class: {self.name}>'
+
+
+class Perimeter(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    x = db.Column(db.Integer)
+    y = db.Column(db.Integer)
+
+    def __repr__(self):
+        return f'<Vertex x: {self.x}, y: {self.y}>'
 
 
 def write_to_db(detections, filename, frame_no):
@@ -279,27 +289,42 @@ def cam3():
 today = datetime.now()
 suffix = today.strftime('%m_%d_%Y_%H')
 
+#
+# cam1_t = threading.Thread(target=detect_objects, args=(web_cam1, 0, f'cam1_{suffix}.avi', 'custom',
+#                                                        YOLO(), stream_output1, lock1))  # Thread for camera 2
+# cam1_t.daemon = True
+# cam1_t.start()
+#
+#
+# cam2_t = threading.Thread(target=detect_objects, args=(mob_cam2,
+#                                                        0,  # 'http://10.47.27.57:8080/video',
+#                                                        f'cam2_{suffix}.avi', 'custom',
+#                                                        YOLO(), stream_output2, lock2))  # Thread for camera 3
+# cam2_t.daemon = True
+# cam2_t.start()
+#
+#
+# cam3_t = threading.Thread(target=detect_objects, args=(mob_cam3,
+#                                                        0,  # 'http://192.168.100.7:8080/video',
+#                                                        f'cam3_{suffix}.avi', 'custom',
+#                                                        YOLO(), stream_output3, lock3))  # Thread for camera 2
+# cam3_t.daemon = True
+# cam3_t.start()
 
-cam1_t = threading.Thread(target=detect_objects, args=(web_cam1, 0, f'cam1_{suffix}.avi', 'custom',
-                                                       YOLO(), stream_output1, lock1))  # Thread for camera 2
-cam1_t.daemon = True
-cam1_t.start()
 
+@app.route("/perimeter", methods=['GET', 'POST'])
+def perimeter():
+    if request.method == 'POST':
+        vertices = json.loads(request.data)
+        if len(vertices) <= 2:
+            return Response(status=400)
+        delete_count = db.session.query(Perimeter).delete()
+        app.logger.info('%d vertex deleted from Perimeter table', delete_count)
+        db.session.add_all([Perimeter(x=vertex[0], y=vertex[1]) for vertex in vertices])
+        db.session.commit()
+        return Response(status=200)
 
-cam2_t = threading.Thread(target=detect_objects, args=(mob_cam2,
-                                                       0,  # 'http://10.47.27.57:8080/video',
-                                                       f'cam2_{suffix}.avi', 'custom',
-                                                       YOLO(), stream_output2, lock2))  # Thread for camera 3
-cam2_t.daemon = True
-cam2_t.start()
-
-
-cam3_t = threading.Thread(target=detect_objects, args=(mob_cam3,
-                                                       0,  # 'http://192.168.100.7:8080/video',
-                                                       f'cam3_{suffix}.avi', 'custom',
-                                                       YOLO(), stream_output3, lock3))  # Thread for camera 2
-cam3_t.daemon = True
-cam3_t.start()
+    return render_template("perimeter.html")
 
 
 if __name__ == '__main__':
