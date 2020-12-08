@@ -10,7 +10,7 @@ if __name__ == '__main__':
     while True:
         ret, frame = cam.read()
         cv2.imshow('frame', frame)
-        cv2.imwrite("data/frames3/frameR.jpg", frame)
+        cv2.imwrite("data/frame3/frameR.jpg", frame)
         count += 1
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break

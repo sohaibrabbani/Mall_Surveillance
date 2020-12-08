@@ -56,13 +56,13 @@ H1 = np.array([
     [-0.0007529157598914953, 0.002160243169386294, 1.0]
 ])
 
-HL = np.array([[-0.3742945545238246, -1.091132842267712, 985.1140031814821],
-               [1.2741875504115496, -0.038566613915210976, -60.77625504291608],
-               [0.0006375440373105805, 0.00048385677889164683, 1.0]])
+HL = np.array([[-0.17426423209765862, -1.031394596052239, 750.412813145867],
+               [1.0000328784997377, 0.14136499853820997, -10.370851456391206],
+               [0.00026540226307438837, 0.0003478893717957895, 1.0]])
 
-HR = np.array([[0.3017907086218721, -1.2416167716780655, 1021.5367338709084],
-               [0.8382672585685141, 0.03898954281256336, 114.78088045652038],
-               [-8.366779008655821e-05, -0.00014174378491588216, 1.0]])
+HR = np.array([[0.2930326492542025, -1.251081170395554, 1001.8914835416477],
+               [0.804143842312905, 0.04353961962924524, 117.8190775285837],
+               [-0.00011482799253370977, -0.0001927218013597335, 0.9999999999999999]])
 
 H2 = np.array([
     [2.96918550e-01, 1.69874720e+00, -1.41966972e+02],
@@ -287,7 +287,8 @@ def detect_objects(source, address, filename, res, yolo, stream_output, lock, H)
         try:
             frame_no += 1
             grabbed, frame = source.read()
-            frame = cv2.resize(frame, dimensions)
+            # frame = cv2.resize(frame, dimensions)
+            # frame = np.rot90(frame, 1)
             if filename:
                 out.write(frame)
 
@@ -349,19 +350,19 @@ def stream_top_live():
         points = []
         if stream_output1[0] is not None:
             frame1 = stream_output1[0]
-            frame1 = cv2.resize(frame1, dimensions)
+            # frame1 = cv2.resize(frame1, dimensions)
             points += stream_output1[1]
-            frame1_warp = cv2.warpPerspective(frame1, H1, dimensions)
+            frame1_warp = cv2.warpPerspective(frame1, HR, dimensions)
 
         if stream_output2[0] is not None:
             frame2 = stream_output2[0]
-            frame2 = cv2.resize(frame2, dimensions)
+            # frame2 = cv2.resize(frame2, dimensions)
             points += stream_output2[1]
-            frame2_warp = cv2.warpPerspective(frame2, H2, dimensions)
+            frame2_warp = cv2.warpPerspective(frame2, HL, dimensions)
 
         if stream_output3[0] is not None:
             frame3 = stream_output3[0]
-            frame3 = cv2.resize(frame3, dimensions)
+            # frame3 = cv2.resize(frame3, dimensions)
             points += stream_output3[1]
             frame3_warp = cv2.warpPerspective(frame3, H3, dimensions)
 
@@ -423,20 +424,21 @@ today = datetime.now()
 suffix = today.strftime('%m_%d_%Y_%H')
 
 
-cam1_t = threading.Thread(target=detect_objects, args=(web_cam1, 'http://192.168.137.67:8080/video',
-                                                       f'cam1_{suffix}.avi', 'custom',
-                                                       YOLO(), stream_output1, lock1, H1))  # Thread for camera 2
-cam1_t.daemon = True
-cam1_t.start()
-
+# cam1_t = threading.Thread(target=detect_objects, args=(web_cam1,
+#                                                        'http://192.168.100.15:8080/video',
+#                                                        f'cam1_{suffix}.avi', 'custom',
+#                                                        YOLO(), stream_output1, lock1, HR))  # Thread for camera 2
+# cam1_t.daemon = True
+# cam1_t.start()
+#
 #
 # cam2_t = threading.Thread(target=detect_objects, args=(mob_cam2,
-#                                                        'http://192.168.100.11:8080/video',
+#                                                        'http://192.168.100.6:8080/video',
 #                                                        f'cam2_{suffix}.avi', 'custom',
-#                                                        YOLO(), stream_output2, lock2, H2))  # Thread for camera 3
+#                                                        YOLO(), stream_output2, lock2, HL))  # Thread for camera 3
 # cam2_t.daemon = True
 # cam2_t.start()
-#
+# #
 #
 # cam3_t = threading.Thread(target=detect_objects, args=(mob_cam3,
 #                                                        'http://192.168.100.11:8080/video',
