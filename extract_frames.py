@@ -1,7 +1,7 @@
 import cv2
 
 # cam = cv2.VideoCapture(0)
-cam = cv2.VideoCapture('data/raw_vids/inside.mp4')
+cam = cv2.VideoCapture('http://192.168.100.15:8080/video')
 
 
 if __name__ == '__main__':
@@ -10,7 +10,7 @@ if __name__ == '__main__':
     while True:
         ret, frame = cam.read()
         cv2.imshow('frame', frame)
-        cv2.imwrite("data/frames3/frame%d.jpg" % count, frame)
+        cv2.imwrite("data/frames3/frameR.jpg", frame)
         count += 1
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
