@@ -16,10 +16,13 @@
         </form>
         {% if filename1 and filename2 and filename3%}
             <p>Homographic View</p>
-            <img src="{{ url_for('video_homo', filename1=filename1, filename2=filename2, filename3=filename3) }}">
+            <img src="{{ url_for('offline_homo', filename1=filename1, filename2=filename2, filename3=filename3) }}">
 
-            <p>Top View</p>
-            <img src="{{ url_for('offline_top')}}">
+            <p>Top View (Tripwire)</p>
+            <img src="{{ url_for('offline_tripwire')}}">
+
+            <p>Top View (Heatmap)</p>
+            <img src="{{ url_for('offline_heatmap')}}">
         {% endif %}
     </div>
   </body>

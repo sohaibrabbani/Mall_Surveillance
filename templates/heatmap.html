@@ -1,0 +1,15 @@
+<html>
+  <head>
+    <title>Mall Video Surveillance</title>
+  </head>
+  <body>
+  <h1>Mall Video Surveillance</h1>
+    <div>
+        <h2>Static Heatmap</h2>
+        {% if filename1 and filename2 and filename3%}
+            <img src="{{ url_for('static_heatmap', filename1=filename1, filename2=filename2, filename3=filename3) }}">
+
+        {% endif %}
+    </div>
+  </body>
+</html>

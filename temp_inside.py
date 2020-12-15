@@ -31,12 +31,12 @@ def click_event_garden(event, x, y, flags, params):
         cv2.imshow('frame', frame)
 
 
-top_view = cv2.imread('data/top_view_720p.jpg')
+top_view = cv2.imread('static/top_view_720p.jpg')
 cv2.imshow('top', top_view)
 cv2.setMouseCallback('top', click_event_top)
 
 
-frame = cv2.imread('data/frame3/frameR.jpg')
+frame = cv2.imread('data/frame3/frameB.jpg')
 
 cv2.imshow('frame', frame)
 cv2.setMouseCallback('frame', click_event_garden)
@@ -59,6 +59,7 @@ H = cv2.findHomography(garden_points, top_view_points)[0]
 # HR = np.array([[0.3017907086218721, -1.2416167716780655, 1021.5367338709084],
 #                [0.8382672585685141, 0.03898954281256336, 114.78088045652038],
 #                [-8.366779008655821e-05, -0.00014174378491588216, 1.0]])
+
 warp = cv2.warpPerspective(frame, H, STD_DIMENSIONS["720p"])
-cv2.imwrite('wrapped_R.jpg', warp)
+cv2.imwrite('wrapped_B.jpg', warp)
 print(H.tolist())

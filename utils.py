@@ -2,6 +2,7 @@ import os
 
 import cv2
 import numpy as np
+from shapely.geometry import Point
 
 
 def change_res(cap, width, height):
@@ -51,3 +52,40 @@ def plot_object(H, detections):
 
     points = [[[d['x'] + d['w'] / 2, d['y'] + d['h'] / 2] for d in detections]]
     return cv2.perspectiveTransform(np.array(points), m=H).astype(np.int)[0].tolist()
+
+
+def draw_on_top(polygon, points, top_view):
+    def check_alert(points):
+        return any([polygon.contains(Point(p[0], p[1])) for p in points])
+
+    for point in points:
+        cv2.circle(top_view, (point[0], point[1]), 5, (0, 0, 255), -1)
+
+    int_coords = lambda x: np.array(x).round().astype(np.int32)
+    exterior = [int_coords(polygon.exterior.coords)]
+    alpha = 0.5
+    overlay = top_view.copy()
+    if polygon:
+        if check_alert(points):
+            cv2.fillPoly(overlay, exterior, color=(0, 0, 255))
+        else:
+            cv2.fillPoly(overlay, exterior, color=(255, 255, 0))
+
+    cv2.addWeighted(overlay, alpha, top_view, 1 - alpha, 0, top_view)
+    return top_view
+
+def stiching(a, b, c):
+    a = a / 255
+    b = b / 255
+    c = c / 255
+
+    final = np.zeros((a.shape))
+    final = np.where(np.logical_and(a != 0, b != 0, c != 0), (a + b + c) / 3, final)
+    final = np.where(np.logical_or(np.logical_and(a == 0, np.logical_xor(b == 0, c == 0)),
+                                   np.logical_and(c == 0, np.logical_xor(a == 0, b == 0)),
+                                   np.logical_and(b == 0, np.logical_xor(a == 0, c == 0))), a + b + c, final)
+    final = np.where(np.logical_or(np.logical_and(a != 0, np.logical_xor(b == 0, c == 0)),
+                                   np.logical_and(c != 0, np.logical_xor(a == 0, b == 0)),
+                                   np.logical_and(b != 0, np.logical_xor(a == 0, c == 0))), (a + b + c) / 2, final)
+
+    return (final * 255).astype(np.float32)

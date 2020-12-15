@@ -63,22 +63,23 @@ class YOLO:
                 # extract the bounding box coordinates
                 (x, y) = (boxes[i][0], boxes[i][1])
                 (w, h) = (boxes[i][2], boxes[i][3])
-                detections.append({
+                detection = {
                     'x': x, 'y': y,
                     'w': w, 'h': h,
                     'name': self.classes[class_ids[i]]
-                })
+                }
                 # draw a bounding box rectangle and label on the frame
                 if draw:
                     color = [int(c) for c in self.COLORS[class_ids[i]]]
                     cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
-                    text = "{}: {:.4f}".format(self.classes[class_ids[i]], confidences[i])
-                    # cv2.putText(frame, text, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
                 if attribute_detect:
                     image = Image.fromarray(frame[..., ::-1])
                     crop_img = image.crop([int(x), int(y), int(x+w), int(y+h)])
                     attributes, age_group, gender = demo_par(model_par, valid_transform, crop_img)
                     cv2.putText(frame, str(attributes), (int(x), int(y - 10)), 0, 5e-3 * 150, color, 2)
+                    detection['gender'] = gender[0] if gender else None
+
+                detections.append(detection)
 
         return detections
 
@@ -96,7 +97,6 @@ def demo_par(model, valid_transform, img):
     txt_res = []
     age_group = []
     gender = []
-    txt = ""
     for idx in range(len(values)):
         if score[0, idx] >= 0.5:
             temp = '%s: %.2f ' % (values[idx], score[0, idx])
@@ -104,6 +104,5 @@ def demo_par(model, valid_transform, img):
                 age_group.append(values[idx])
             else:
                 gender.append(values[idx])
-            # txt += temp
             txt_res.append(temp)
     return txt_res, age_group, gender

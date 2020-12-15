@@ -17,7 +17,7 @@ def click_event(event, x, y, flags, params):
         cv2.imshow('top', top_view)
 
 
-top_view = cv2.imread('data/top_view_720p.jpg')
+top_view = cv2.imread('static/top_view_720p.jpg')
 cv2.imshow('top', top_view)
 cv2.setMouseCallback('top', click_event)
 
