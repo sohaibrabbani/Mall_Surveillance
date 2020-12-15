@@ -24,7 +24,7 @@ def heatmap(points, top_view):
 
     heat = heat / (np.max(heat, axis=(0, 1)) + 0.0001)
     gray = cv2.cvtColor(heat, cv2.COLOR_RGB2GRAY)
-    mask_heat = np.where(gray > 0.1, 1, 0).astype(np.float32)[:, :, None]
+    mask_heat = np.where(gray > 0.15, 1, 0).astype(np.float32)[:, :, None]
     mask_top = np.ones(top_view.shape) * (1 - mask_heat)
     new_top = top_view * mask_top + heat * mask_heat
     return new_top * 255

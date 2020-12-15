@@ -1,6 +1,7 @@
 import os
 import threading
 from datetime import datetime
+from shapely.geometry import Point
 
 import json
 import cv2
@@ -58,27 +59,44 @@ today = datetime.now()
 suffix = today.strftime('%m_%d_%Y_%H')
 
 
-HL = np.array([[-0.17426423209765862, -1.031394596052239, 750.412813145867],
-               [1.0000328784997377, 0.14136499853820997, -10.370851456391206],
-               [0.00026540226307438837, 0.0003478893717957895, 1.0]])
+HL = np.array([[-0.38642662650231274, -0.8059835826818605, 797.7437880067304],
+               [0.9258998532256701, 0.5128575913844857, 13.923887141477518],
+               [-0.00032536672004462825, 0.001430037985419314, 1.0]]
+              )
 
-HR = np.array([[0.2930326492542025, -1.251081170395554, 1001.8914835416477],
-               [0.804143842312905, 0.04353961962924524, 117.8190775285837],
-               [-0.00011482799253370977, -0.0001927218013597335, 0.9999999999999999]])
+
+HR = np.array([[0.0033719867707864503, -1.4726878222335282, 1137.3633394494918],
+               [0.7664785005556483, -0.2919975810487539, 172.32904677723434],
+               [-8.397064883719701e-05, -0.00037702703132398664, 0.9999999999999999]])
+
 
 HC = np.array([[-0.4267572874811169, 0.12202433258793428, 679.1648279868555],
                [0.07855525944118393, 0.5634066050345926, 156.2850020670053],
                [-0.0007529157598914953, 0.002160243169386294, 1.0]])
+#
+# HR_offline = np.array([[0.11080560537895662, -1.0599380061894015, 965.4661420386825],
+#                [0.6015272798960488, -0.0192179004621332, 194.81952858686287],
+#                [-0.00015737848112515156, -0.00020505711257484048, 1.0]])
+# HC_offline = np.array([[0.11080560537895662, -1.0599380061894015, 965.4661420386825],
+#                [0.6015272798960488, -0.0192179004621332, 194.81952858686287],
+#                [-0.00015737848112515156, -0.00020505711257484048, 1.0]])
+# HL_offline = np.array([[0.5483783109688897, -0.158356441030431, 404.5190885191851],
+#                        [0.0276893098971346, 0.6240793626918955, -75.88552186278486],
+#                        [-0.00019537620569174031, 0.0003509974952078044, 0.9999999999999999]])
 
-HR_offline = np.array([[0.11080560537895662, -1.0599380061894015, 965.4661420386825],
-               [0.6015272798960488, -0.0192179004621332, 194.81952858686287],
-               [-0.00015737848112515156, -0.00020505711257484048, 1.0]])
-HC_offline = np.array([[0.11080560537895662, -1.0599380061894015, 965.4661420386825],
-               [0.6015272798960488, -0.0192179004621332, 194.81952858686287],
-               [-0.00015737848112515156, -0.00020505711257484048, 1.0]])
-HL_offline = np.array([[0.5483783109688897, -0.158356441030431, 404.5190885191851],
-                       [0.0276893098971346, 0.6240793626918955, -75.88552186278486],
-                       [-0.00019537620569174031, 0.0003509974952078044, 0.9999999999999999]])
+HL_offline = np.array([[-0.38642662650231274, -0.8059835826818605, 797.7437880067304],
+               [0.9258998532256701, 0.5128575913844857, 13.923887141477518],
+               [-0.00032536672004462825, 0.001430037985419314, 1.0]]
+              )
+
+
+HR_offline = np.array([[0.0033719867707864503, -1.4726878222335282, 1137.3633394494918],
+               [0.7664785005556483, -0.2919975810487539, 172.32904677723434],
+               [-8.397064883719701e-05, -0.00037702703132398664, 0.9999999999999999]])
+
+HC_offline = np.array([[0.0033719867707864503, -1.4726878222335282, 1137.3633394494918],
+               [0.7664785005556483, -0.2919975810487539, 172.32904677723434],
+               [-8.397064883719701e-05, -0.00037702703132398664, 0.9999999999999999]])
 
 lock1 = threading.Lock()
 stream_output1 = [np.zeros((480, 640, 3)), []]
@@ -146,7 +164,8 @@ def write_to_db(detections, filename, frame_no):
     db.session.commit()
 
 
-def write_to_db_top(points, frame_no, source1=f'cam1_{suffix}.avi', source2=f'cam2_{suffix}.avi', source3=f'cam3_{suffix}.avi'):
+def write_to_db_top(points, frame_no, source1=f'cam1_{suffix}.avi',
+                    source2=f'cam2_{suffix}.avi', source3=f'cam3_{suffix}.avi'):
     for point in points:
         top_point = TopPoint(x=point[0], y=point[1], frame_no=frame_no,
                              source1=source1, source2=source2, source3=source3)
@@ -203,13 +222,19 @@ def video_homography(file_path1, file_path2, file_path3, res):
 
         if not flag:
             continue
-
         yield b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encoded_image) + b'\r\n'
 
 
+# tripwire_video = cv2.VideoWriter('data/tripwire.mp4', cv2.VideoWriter_fourcc(*'XVID'), FPS, STD_DIMENSIONS["480p"])
 def video_tripwire():
     while True:
         final = draw_on_top(polygon, offline_data[0], top_view.copy())
+        # tripwire_points = []
+        # for p in offline_data[0]:
+        #     if polygon.contains(Point(p[0], p[1])):
+        #         tripwire_points.append(p)
+
+        # tripwire_video.write()
         flag, encoded_image = cv2.imencode(".jpg", final)
 
         if not flag:
@@ -314,7 +339,7 @@ def stream_heatmap():
     while True:
         live_points += stream_output1[1] + stream_output2[1] + stream_output3[1]
 
-        final = heatmap(live_points, top_view.copy())
+        final = heatmap(live_points[-10:], top_view.copy())
 
         flag, encoded_image = cv2.imencode(".jpg", final)
         if not flag:
@@ -465,39 +490,20 @@ def offline_heatmap():
     return Response(video_heatmap(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
+cam1_t = threading.Thread(target=detect_objects, args=(web_cam1, 'http://192.168.100.5:8080/video',
+                                                       f'cam1_{suffix}.avi', '480p',
+                                                       YOLO(), stream_output1, lock1, HR))  # Thread for camera 2
+cam1_t.daemon = True
+cam1_t.start()
 
 
+cam2_t = threading.Thread(target=detect_objects, args=(mob_cam2,
+                                                       'http://192.168.100.13:8080/video',
+                                                       f'cam2_{suffix}.avi', '480p',
+                                                       YOLO(), stream_output2, lock2, HL))  # Thread for camera 3
+cam2_t.daemon = True
+cam2_t.start()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# #
-# cam1_t = threading.Thread(target=detect_objects, args=(web_cam1, 'http://192.168.100.5:8080/video',
-#                                                        f'cam1_{suffix}.avi', '480p',
-#                                                        YOLO(), stream_output1, lock1, HR))  # Thread for camera 2
-# cam1_t.daemon = True
-# cam1_t.start()
-#
-#
-# cam2_t = threading.Thread(target=detect_objects, args=(mob_cam2,
-#                                                        0,  # 'http://10.47.27.57:8080/video',
-#                                                        f'cam2_{suffix}.avi', '480p',
-#                                                        YOLO(), stream_output2, lock2))  # Thread for camera 3
-# cam2_t.daemon = True
-# cam2_t.start()
-#
 #
 # cam3_t = threading.Thread(target=detect_objects, args=(mob_cam3,
 #                                                        0,  # 'http://192.168.100.7:8080/video',

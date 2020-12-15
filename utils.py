@@ -49,7 +49,6 @@ def plot_object(H, detections):
     # hp = (hp/hp[2]).astype(np.int)
     if not detections:
         return []
-
     points = [[[d['x'] + d['w'] / 2, d['y'] + d['h'] / 2] for d in detections]]
     return cv2.perspectiveTransform(np.array(points), m=H).astype(np.int)[0].tolist()
 
@@ -58,6 +57,7 @@ def draw_on_top(polygon, points, top_view):
     def check_alert(points):
         return any([polygon.contains(Point(p[0], p[1])) for p in points])
 
+    # Drawing the points
     for point in points:
         cv2.circle(top_view, (point[0], point[1]), 5, (0, 0, 255), -1)
 

@@ -36,7 +36,7 @@ cv2.imshow('top', top_view)
 cv2.setMouseCallback('top', click_event_top)
 
 
-frame = cv2.imread('data/frame3/frameB.jpg')
+frame = cv2.imread('data/frame/frameL.jpg')
 
 cv2.imshow('frame', frame)
 cv2.setMouseCallback('frame', click_event_garden)
@@ -61,5 +61,5 @@ H = cv2.findHomography(garden_points, top_view_points)[0]
 #                [-8.366779008655821e-05, -0.00014174378491588216, 1.0]])
 
 warp = cv2.warpPerspective(frame, H, STD_DIMENSIONS["720p"])
-cv2.imwrite('wrapped_B.jpg', warp)
+cv2.imwrite('wrapped_L.jpg', warp)
 print(H.tolist())
