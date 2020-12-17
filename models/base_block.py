@@ -2,7 +2,7 @@ import math
 
 import torch.nn as nn
 from torch.nn.modules.batchnorm import _BatchNorm
-
+# https://github.com/valencebond/Strong_Baseline_of_Pedestrian_Attribute_Recognition
 
 class BaseClassifier(nn.Module):
     def __init__(self, nattr):
